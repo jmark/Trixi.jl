@@ -45,7 +45,7 @@ end
 
 
 @inline function weak_form_kernel!(du, u,
-                                   element, mesh::Union{StructuredMesh{2}, UnstructuredMesh2D, P4estMesh{2}},
+                                   element, mesh::Union{StructuredMesh{2}, UnstructuredMesh2D, P4estMesh{2}, T8codeMesh{2}},
                                    nonconservative_terms::Val{false}, equations,
                                    dg::DGSEM, cache, alpha=true)
   # true * [some floating point value] == [exactly the same floating point value]

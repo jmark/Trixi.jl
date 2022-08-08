@@ -442,6 +442,78 @@ function (amr_callback::AMRCallback)(u_ode::AbstractVector, mesh::P4estMesh,
   return has_changed
 end
 
+function (amr_callback::AMRCallback)(u_ode::AbstractVector, mesh::T8codeMesh,
+                                     equations, dg::DG, cache, semi,
+                                     t, iter;
+                                     only_refine=false, only_coarsen=false,
+                                     passive_args=())
+
+  has_changed = false
+
+  @unpack controller, adaptor = amr_callback
+
+  u = wrap_array(u_ode, mesh, equations, dg, cache)
+  indicators = @trixi_timeit timer() "indicator" controller(u, mesh, equations, dg, cache, t=t, iter=iter)
+
+  @boundscheck begin
+    @assert axes(indicators) == (Base.OneTo(ncells(mesh)),) (
+      "Indicator array (axes = $(axes(indicators))) and mesh cells (axes = $(Base.OneTo(ncells(mesh)))) have different axes"
+    )
+  end
+
+  changed_original_cells = @trixi_timeit timer() "mesh" adapt!(mesh,indicators)
+
+  refined_original_cells   = changed_original_cells .==  1
+  coarsened_original_cells = changed_original_cells .== -1
+
+  @trixi_timeit timer() "refine" if !only_coarsen
+    @trixi_timeit timer() "solver" refine!(u_ode, adaptor, mesh, equations, dg, cache, refined_original_cells)
+
+    for (p_u_ode, p_mesh, p_equations, p_dg, p_cache) in passive_args
+      @trixi_timeit timer() "passive solver" refine!(p_u_ode, adaptor, p_mesh, p_equations,
+                                              p_dg, p_cache, refined_original_cells)
+    end
+  end
+
+  @trixi_timeit timer() "coarsen" if !only_refine
+    @trixi_timeit timer() "solver" coarsen!(u_ode, adaptor, mesh, equations, dg, cache,
+                                     coarsened_original_cells)
+    for (p_u_ode, p_mesh, p_equations, p_dg, p_cache) in passive_args
+      @trixi_timeit timer() "passive solver" coarsen!(p_u_ode, adaptor, p_mesh, p_equations,
+                                               p_dg, p_cache, coarsened_original_cells)
+    end
+  end
+
+  # Store whether there were any cells coarsened or refined and perform load balancing.
+  has_changed = !isempty(refined_original_cells) || !isempty(coarsened_original_cells)
+
+  # Check if mesh changed on other processes
+  if mpi_isparallel()
+    has_changed = MPI.Allreduce!(Ref(has_changed), |, mpi_comm())[]
+  end
+
+  # if has_changed # TODO: Taal decide, where shall we set this?
+  #   # don't set it to has_changed since there can be changes from earlier calls
+  #   mesh.unsaved_changes = true
+
+  #   if mpi_isparallel() && amr_callback.dynamic_load_balancing
+  #     @trixi_timeit timer() "dynamic load balancing" begin
+  #       global_first_quadrant = unsafe_wrap(Array, mesh.p4est.global_first_quadrant, mpi_nranks() + 1)
+  #       old_global_first_quadrant = copy(global_first_quadrant)
+  #       partition!(mesh)
+  #       rebalance_solver!(u_ode, mesh, equations, dg, cache, old_global_first_quadrant)
+  #     end
+  #   end
+
+  #   reinitialize_boundaries!(semi.boundary_conditions, cache)
+  # end
+
+  # Return true if there were any cells coarsened or refined, otherwise false
+  return has_changed
+end
+
+
+
 function reinitialize_boundaries!(boundary_conditions::UnstructuredSortedBoundaryTypes, cache)
   # Reinitialize boundary types container because boundaries may have changed.
   initialize!(boundary_conditions, cache)
@@ -599,6 +671,10 @@ function current_element_levels(mesh::P4estMesh, solver, cache)
   return current_levels
 end
 
+
+function current_element_levels(mesh::T8codeMesh, solver, cache)
+  return trixi_t8_get_local_element_levels(mesh.forest)
+end
 
 # TODO: Taal refactor, merge the two loops of ControllerThreeLevel and IndicatorLöhner etc.?
 #       But that would remove the simplest possibility to write that stuff to a file...

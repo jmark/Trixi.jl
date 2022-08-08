@@ -64,6 +64,8 @@ using TriplotRecipes: DGTriPseudocolor
 @reexport using UnPack: @unpack
 using UnPack: @pack!
 
+using Infiltrator
+
 # finite difference SBP operators
 using SummationByPartsOperators: AbstractDerivativeOperator,
   AbstractNonperiodicDerivativeOperator, DerivativeOperator,
@@ -101,6 +103,7 @@ include("basic_types.jl")
 include("auxiliary/auxiliary.jl")
 include("auxiliary/mpi.jl")
 include("auxiliary/p4est.jl")
+include("auxiliary/t8code.jl")
 include("equations/equations.jl")
 include("meshes/meshes.jl")
 include("solvers/solvers.jl")
@@ -169,7 +172,7 @@ export entropy, energy_total, energy_kinetic, energy_internal, energy_magnetic, 
 export lake_at_rest_error
 export ncomponents, eachcomponent
 
-export TreeMesh, StructuredMesh, UnstructuredMesh2D, P4estMesh
+export TreeMesh, StructuredMesh, UnstructuredMesh2D, P4estMesh, T8codeMesh
 
 export DG,
        DGSEM, LobattoLegendreBasis,
@@ -222,6 +225,7 @@ function __init__()
   init_mpi()
 
   init_p4est()
+  init_t8code()
 
   # Enable features that depend on the availability of the Plots package
   @require Plots="91a5bcdd-55d7-5caf-9e0b-520d859cae80" begin

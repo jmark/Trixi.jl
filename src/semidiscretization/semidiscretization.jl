@@ -91,7 +91,6 @@ function semidiscretize(semi::AbstractSemidiscretization, tspan, restart_file::A
   return ODEProblem(rhs!, u0_ode, tspan, semi)
 end
 
-
 """
     compute_coefficients(func, t, semi::AbstractSemidiscretization)
 

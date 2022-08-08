@@ -71,9 +71,8 @@ function rebalance_solver!(u_ode::AbstractVector, mesh::TreeMesh{2}, equations,
   end # GC.@preserve old_u_ode
 end
 
-
 # Refine elements in the DG solver based on a list of cell_ids that should be refined
-function refine!(u_ode::AbstractVector, adaptor, mesh::Union{TreeMesh{2}, P4estMesh{2}},
+function refine!(u_ode::AbstractVector, adaptor, mesh::Union{TreeMesh{2}, P4estMesh{2}, T8codeMesh{2}},
                  equations, dg::DGSEM, cache, elements_to_refine)
   # Return early if there is nothing to do
   if isempty(elements_to_refine)
@@ -197,7 +196,7 @@ end
 
 
 # Coarsen elements in the DG solver based on a list of cell_ids that should be removed
-function coarsen!(u_ode::AbstractVector, adaptor, mesh::Union{TreeMesh{2}, P4estMesh{2}},
+function coarsen!(u_ode::AbstractVector, adaptor, mesh::Union{TreeMesh{2}, P4estMesh{2}, T8codeMesh{2}},
                   equations, dg::DGSEM, cache, elements_to_remove)
   # Return early if there is nothing to do
   if isempty(elements_to_remove)
@@ -320,7 +319,7 @@ end
 
 
 # this method is called when an `ControllerThreeLevel` is constructed
-function create_cache(::Type{ControllerThreeLevel}, mesh::Union{TreeMesh{2}, P4estMesh{2}}, equations, dg::DG, cache)
+function create_cache(::Type{ControllerThreeLevel}, mesh::Union{TreeMesh{2}, P4estMesh{2}, T8codeMesh{2}}, equations, dg::DG, cache)
 
   controller_value = Vector{Int}(undef, nelements(dg, cache))
   return (; controller_value)
