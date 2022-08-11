@@ -1,3 +1,5 @@
+using Printf
+
 # By default, Julia/LLVM does not use fused multiply-add operations (FMAs).
 # Since these FMAs can increase the performance of many numerical algorithms,
 # we need to opt-in explicitly.
@@ -110,6 +112,19 @@ function rhs!(du, u, t,
     have_nonconservative_terms(equations), equations,
     dg.volume_integral, dg, cache)
 
+   # println("## STEP ## t = ", t)
+
+   # for e in 1:size(du,4)
+   #  println("vf: du[$e]")
+   #  for i = 1:4
+   #    for j = 1:4
+   #      @printf( "%24.20f", du[1,i,j,e])
+   #    end
+   #  println("")
+   #  end
+   #  println("")
+   # end 
+
   # Prolong solution to interfaces
   @trixi_timeit timer() "prolong2interfaces" prolong2interfaces!(
     cache, u, mesh, equations, dg.surface_integral, dg)
@@ -146,7 +161,18 @@ function rhs!(du, u, t,
   @trixi_timeit timer() "Jacobian" apply_jacobian!(
     du, mesh, equations, dg, cache)
 
-  # Calculate source terms
+   # for e in 1:size(du,4)
+   #  println("sf: du[$e]")
+   #  for i = 1:4
+   #    for j = 1:4
+   #      @printf( "%24.20f", du[1,i,j,e])
+   #    end
+   #  println("")
+   #  end
+   #  println("")
+   # end 
+
+ # Calculate source terms
   @trixi_timeit timer() "source terms" calc_sources!(
     du, u, t, source_terms, equations, dg, cache)
 
@@ -1000,7 +1026,7 @@ function calc_surface_integral!(du, u, mesh::Union{TreeMesh{2}, StructuredMesh{2
 end
 
 
-function apply_jacobian!(du, mesh::Union{TreeMesh{2}, StructuredMesh{2}, UnstructuredMesh2D, P4estMesh{2}, T8codeMesh{2}},
+function apply_jacobian!(du, mesh::TreeMesh{2},
                          equations, dg::DG, cache)
 
   @threaded for element in eachelement(dg, cache)

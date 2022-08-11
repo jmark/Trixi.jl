@@ -99,6 +99,8 @@ function refine!(u_ode::AbstractVector, adaptor, mesh::Union{TreeMesh{2}, P4estM
     resize!(u_ode, nvariables(equations) * nnodes(dg)^ndims(mesh) * nelements(dg, cache))
     u = wrap_array(u_ode, mesh, equations, dg, cache)
 
+    println("## size(u) = ", size(u))
+
     # Loop over all elements in old container and either copy them or refine them
     element_id = 1
     for old_element_id in 1:old_n_elements

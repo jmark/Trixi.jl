@@ -8,6 +8,7 @@ mutable struct T8codeMesh{NDIMS, RealT<:Real, IsParallel, NDIMSP2, NNODES} <: Ab
   cmesh                 :: Ptr{Cvoid} # cpointer to coarse mesh
   scheme                :: Ptr{Cvoid} # cpointer to element scheme
   forest                :: Ptr{Cvoid} # cpointer to forest
+  forest_cached         :: Ptr{Cvoid} # cpointer to a cached forest
   is_parallel           :: IsParallel
   # ghost                 :: Ghost # Either Ptr{t8code_ghost_t} or Ptr{t8code_hex_ghost_t}
   # Coordinates at the nodes specified by the tensor product of 'nodes' (NDIMS times).
@@ -43,11 +44,11 @@ mutable struct T8codeMesh{NDIMS, RealT<:Real, IsParallel, NDIMSP2, NNODES} <: Ab
     # ghost = ghost_new_t8code(t8code)
 
     mesh = new{NDIMS, eltype(tree_node_coordinates), typeof(is_parallel), NDIMS+2, length(nodes)}(
-      cmesh, scheme, forest, is_parallel, tree_node_coordinates, nodes, boundary_names, current_filename, unsaved_changes)
+      cmesh, scheme, forest, C_NULL, is_parallel, tree_node_coordinates, nodes, boundary_names, current_filename, unsaved_changes)
 
     # Destroy 't8code' structs when the mesh is garbage collected.
     finalizer(function (mesh::T8codeMesh{NDIMS})
-      t8_forest_unref(Ref(mesh.forest));
+      trixi_t8_unref_forest(mesh.forest)
       finalize_t8code()
     end, mesh)
 
@@ -194,7 +195,7 @@ function T8codeMesh(trees_per_dimension; polydeg,
 
   structured_boundary_names!(boundary_names, trees_per_dimension, periodicity)
 
-  return T8codeMesh{NDIMS}(cmesh,scheme,forest, tree_node_coordinates, nodes, boundary_names, "", unsaved_changes)
+  return T8codeMesh{NDIMS}(cmesh, scheme,forest, tree_node_coordinates, nodes, boundary_names, "", unsaved_changes)
 end
 
 function balance!(mesh::T8codeMesh{2}, init_fn=C_NULL)
@@ -209,18 +210,27 @@ end
 
 # Coarsen or refine marked cells and rebalance forest. Return a list of all
 # cells that have been adapted during coarsening/refinement or rebalancing.
-function refine!(mesh::T8codeMesh, indicators)
+function adapt!(mesh::T8codeMesh, indicators)
 
-  adapted_forest = trixi_t8_adapt_new(mesh.forest, indicators)
+  println("## begin t8code_adapt!")
+  old_levels = trixi_t8_get_local_element_levels(mesh.forest)
 
+  mesh.forest_cached = trixi_t8_adapt_new(mesh.forest, indicators)
 
- 
+  new_levels = trixi_t8_get_local_element_levels(mesh.forest_cached)
 
-  return nothing
+  # differences = trixi_t8_get_difference(mesh.forest, mesh.forest_cached)
+  differences = trixi_t8_get_difference(old_levels, new_levels)
+
+  trixi_t8_unref_forest(mesh.forest)
+  mesh.forest = mesh.forest_cached
+  println("## end t8code_adapt!")
+
+  return differences
 end
 
 # Coarsen marked cells if the forest will stay balanced.
 # Return a list of all cells that have been coarsened.
-function coarsen!(mesh::T8codeMesh)
-  return nothing
-end
+# function coarsen!(mesh::T8codeMesh)
+#   return nothing
+# end

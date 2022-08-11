@@ -138,6 +138,7 @@ function calc_interface_flux!(surface_flux_values,
       node_secondary_step = 1
     end
 
+    # println("interface = $interface")
     for node in eachnode(dg)
       # Get the normal direction on the primary element.
       # Contravariant vectors at interfaces in negative coordinate direction
@@ -177,6 +178,10 @@ end
   u_ll, u_rr = get_surface_node_vars(u, equations, dg, primary_node_index, interface_index)
 
   flux_ = surface_flux(u_ll, u_rr, normal_direction, equations)
+
+  # if normal_direction[1] > 1e-10
+  #   println("interface flux = $flux_; n = $normal_direction")
+  # end
 
   for v in eachvariable(equations)
     surface_flux_values[v, primary_node_index, primary_direction_index, primary_element_index] = flux_[v]
@@ -424,6 +429,9 @@ function calc_mortar_flux!(surface_flux_values,
   index_range = eachnode(dg)
 
   @threaded for mortar in eachmortar(dg, cache)
+  
+    # println("mortar = $mortar")
+
     # Choose thread-specific pre-allocated container.
     fstar = (fstar_lower_threaded[Threads.threadid()],
              fstar_upper_threaded[Threads.threadid()])
@@ -482,6 +490,14 @@ end
 
   flux = surface_flux(u_ll, u_rr, normal_direction, equations)
 
+  # println(flux)
+
+  # println("calc_mortar_flux = $flux; n = $normal_direction")
+
+  # if normal_direction[2] > 1e-10
+  #   println("mortar  flux = $flux_")
+  # end
+
   # Copy flux to buffer.
   set_node_vars!(fstar[position_index], flux, equations, dg, node_index)
 end
@@ -524,11 +540,17 @@ end
   small_indices   = node_indices[1, mortar]
   small_direction = indices2direction(small_indices)
 
+  # println("mortar = ", mortar)
+  # println("small_indices   = ", small_indices)
+  # println("small_direction = ", small_direction)
+  # println("")
+
   for position in 1:2
     element = neighbor_ids[position, mortar]
     for i in eachnode(dg)
       for v in eachvariable(equations)
         surface_flux_values[v, i, small_direction, element] = fstar[position][v, i]
+        # println("fstar[$position][$i, $small_direction, $element]= ", fstar[position][v, i])
       end
     end
   end
@@ -537,7 +559,7 @@ end
   multiply_dimensionwise!(u_buffer,
                           mortar_l2.reverse_upper, fstar[2],
                           mortar_l2.reverse_lower, fstar[1])
-
+  
   # The flux is calculated in the outward direction of the small elements,
   # so the sign must be switched to get the flux in outward direction
   # of the large element.
@@ -555,16 +577,21 @@ end
   large_indices  = node_indices[2, mortar]
   large_direction = indices2direction(large_indices)
 
+  # println("u_buffer = ", u_buffer)
+  # println("")
+
   if :i_backward in large_indices
     for i in eachnode(dg)
       for v in eachvariable(equations)
         surface_flux_values[v, end + 1 - i, large_direction, large_element] = u_buffer[v, i]
+        # println("u_buffer[$i,bw, $large_direction, $large_element] = ", u_buffer[v, i])
       end
     end
   else
     for i in eachnode(dg)
       for v in eachvariable(equations)
         surface_flux_values[v, i, large_direction, large_element] = u_buffer[v, i]
+        # println("u_buffer[$i,fw, $large_direction, $large_element] = ", u_buffer[v, i])
       end
     end
   end

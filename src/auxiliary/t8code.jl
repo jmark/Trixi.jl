@@ -82,8 +82,11 @@ const t8code_root_len = 1 << T8CODE_MAXLEVEL
 @t8_ccall(t8_init, Cvoid, log_threshold :: Cint = SC_LP_PRODUCTION)
 
 function init_t8code()
-  sc_init(t8_mpi_comm(), 1, 1, C_NULL, SC_LP_VERBOSE);
-  t8_init(SC_LP_VERBOSE)
+  loglevel = SC_LP_VERBOSE
+  # loglevel = SC_LP_SILENT
+
+  sc_init(t8_mpi_comm(), 1, 1, C_NULL, loglevel)
+  t8_init(loglevel)
   return nothing
 end
 
@@ -109,6 +112,8 @@ function t8_free(ptr)
   sc_free(-1, ptr)
 end
 
+@t8_ccall(t8_forest_init, Cvoid, pforest :: Cptr)
+
 # void t8_forest_set_user_data (t8_forest_t forest, void *data);
 @t8_ccall(t8_forest_set_user_data, Cvoid, pforest :: Cptr, data :: Cptr)
 
@@ -117,6 +122,25 @@ end
 
 # int t8_forest_is_committed (t8_forest_t forest);
 @t8_ccall(t8_forest_is_committed, Cint, pforest :: Cptr)
+
+# void t8_forest_set_adapt (t8_forest_t forest,
+#                           const t8_forest_t set_from,
+#                           t8_forest_adapt_t adapt_fn,
+#                           int recursive);
+@t8_ccall(t8_forest_set_adapt, Cvoid, pforest :: Cptr, set_from :: Cptr, adapt_fn :: Cptr, recursive :: Cint)
+
+# void t8_forest_set_partition (t8_forest_t forest,
+#                               const t8_forest_t set_from,
+#                               int set_for_coarsening);
+@t8_ccall(t8_forest_set_partition, Cvoid, pforest :: Cptr, set_from :: Cptr, set_for_coarsening :: Cint)
+
+# void t8_forest_set_balance (t8_forest_t forest,
+#                             const t8_forest_t set_from,
+#                             int no_repartition);
+@t8_ccall(t8_forest_set_balance, Cvoid, pforest :: Cptr, set_from :: Cptr, no_repartition :: Cint)
+
+# void t8_forest_commit (t8_forest_t forest);
+@t8_ccall(t8_forest_commit, Cvoid, pforest :: Cptr)
 
 # t8_locidx_t t8_forest_get_tree_element_offset (t8_forest_t forest, t8_locidx_t ltreeid);
 @t8_ccall(t8_forest_get_tree_element_offset, t8_locidx_t, forest :: Cptr, ltreeid :: t8_locidx_t)
@@ -286,6 +310,10 @@ end
   pneigh_scheme       :: Cptr,
   forest_is_balanced  :: Cint)
 
+function trixi_t8_unref_forest(forest :: Cptr)
+  t8_forest_unref(Ref(forest))
+end
+
 function trixi_t8_count_interfaces(forest :: Cptr)
   # /* Check that forest is a committed, that is valid and usable, forest. */
   @T8_ASSERT (t8_forest_is_committed(forest) != 0);
@@ -365,9 +393,10 @@ function trixi_t8_count_interfaces(forest :: Cptr)
 
   println("")
   println("")
-  println(" ## local_num_conform = ", local_num_conform)
-  println(" ## local_num_mortars = ", local_num_mortars)
-  println(" ## local_num_boundry = ", local_num_boundry)
+  println(" ## local_num_elements = ", num_local_elements)
+  println(" ## local_num_conform  = ", local_num_conform)
+  println(" ## local_num_mortars  = ", local_num_mortars)
+  println(" ## local_num_boundry  = ", local_num_boundry)
   println("")
   println("")
 
@@ -431,9 +460,50 @@ function trixi_t8_fill_interfaces(forest :: Cptr, interfaces, mortars, boundarie
         if num_neighbors > 0
           neighbor_level = t8_element_level(neighbor_scheme, neighbor_leafs[1])
 
+          # Non-conforming interface.
           if level < neighbor_level 
               local_num_mortars += 1
 
+              # faces = (iface,dual_faces[1])
+              faces = (dual_faces[1],iface)
+
+              mortar_id = local_num_mortars
+              orientation = 0 # aligned in z-order
+
+              # Last entry is the large element ... What a stupid convention!
+              mortars.neighbor_ids[end, mortar_id] = ielement + 1
+
+              # First `1:end-1` entries are the smaller elements.
+              mortars.neighbor_ids[1:end-1, mortar_id] .= neighbor_ielements[:] .+ 1
+
+              for side in 1:2
+                # Align mortar in positive coordinate direction of small side.
+                # For orientation == 1, the large side needs to be indexed backwards
+                # relative to the mortar.
+                if side == 1 || orientation == 0
+                  # Forward indexing for small side or orientation == 0
+                  i = :i_forward
+                else
+                  # Backward indexing for large side with reversed orientation
+                  i = :i_backward
+                end
+
+                if faces[side] == 0
+                  # Index face in negative x-direction
+                  mortars.node_indices[side, mortar_id] = (:begin, i)
+                elseif faces[side] == 1
+                  # Index face in positive x-direction
+                  mortars.node_indices[side, mortar_id] = (:end, i)
+                elseif faces[side] == 2
+                  # Index face in negative y-direction
+                  mortars.node_indices[side, mortar_id] = (i, :begin)
+                else # faces[side] == 3
+                  # Index face in positive y-direction
+                  mortars.node_indices[side, mortar_id] = (i, :end)
+                end
+              end
+
+          # Conforming interface.
           elseif level == neighbor_level && all(Int32(current_index) .<= neighbor_ielements)
               local_num_conform += 1
 
@@ -445,9 +515,36 @@ function trixi_t8_fill_interfaces(forest :: Cptr, interfaces, mortars, boundarie
               interfaces.neighbor_ids[1, interface_id] = ielement + 1
               interfaces.neighbor_ids[2, interface_id] = neighbor_ielements[1] + 1
 
-              init_interface_node_indices!(interfaces, faces, orientation, interface_id)
+              # Iterate over primary and secondary element.
+              for side in 1:2
+                # Align interface in positive coordinate direction of primary element.
+                # For orientation == 1, the secondary element needs to be indexed backwards
+                # relative to the interface.
+                if side == 1 || orientation == 0
+                  # Forward indexing
+                  i = :i_forward
+                else
+                  # Backward indexing
+                  i = :i_backward
+                end
+
+                if faces[side] == 0
+                  # Index face in negative x-direction
+                  interfaces.node_indices[side, interface_id] = (:begin, i)
+                elseif faces[side] == 1
+                  # Index face in positive x-direction
+                  interfaces.node_indices[side, interface_id] = (:end, i)
+                elseif faces[side] == 2
+                  # Index face in negative y-direction
+                  interfaces.node_indices[side, interface_id] = (i, :begin)
+                else # faces[side] == 3
+                  # Index face in positive y-direction
+                  interfaces.node_indices[side, interface_id] = (i, :end)
+                end
+              end
           end
 
+        # Domain boundary.
         else
 
           local_num_boundry += 1
@@ -514,12 +611,16 @@ function adapt_callback(forest,
                          num_elements,
                          elements) :: Cint
 
+  num_levels = t8_forest_get_local_num_elements(forest_from)
+
   indicator_ptr = Ptr{Int}(t8_forest_get_user_data(forest))
-  indicators = unsafe_wrap(Array,indicator_ptr,num_neighbors)
+  indicators = unsafe_wrap(Array,indicator_ptr,num_levels)
+
+  # println(indicators)
 
   offset = t8_forest_get_tree_element_offset(forest_from, which_tree)
 
-  return indicators[offset + lelement_id]
+  return Cint(indicators[offset + lelement_id + 1])
 end
 
 function trixi_t8_adapt_new(old_forest :: Cptr, indicators)
@@ -531,8 +632,10 @@ function trixi_t8_adapt_new(old_forest :: Cptr, indicators)
   t8_forest_init(new_forest_ref);
   new_forest = new_forest_ref[]
 
+  # println(indicators)
+
   let set_from = C_NULL, recursive = 0, set_for_coarsening = 0, no_repartition = 0
-    t8_forest_set_user_data(new_forest, Ref(indicators))
+    t8_forest_set_user_data(new_forest, pointer(indicators))
     t8_forest_set_adapt(new_forest, old_forest, @t8_adapt_callback(adapt_callback), recursive)
     t8_forest_set_balance(new_forest, set_from, no_repartition)
     t8_forest_set_partition(new_forest, set_from, set_for_coarsening)
@@ -543,10 +646,8 @@ function trixi_t8_adapt_new(old_forest :: Cptr, indicators)
   return new_forest
 end
 
-function trixi_t8_get_difference(old_forest :: Cptr, new_forest :: Cptr)
-
-  old_levels = trixi_t8_get_element_levels(old_forest)
-  new_levels = trixi_t8_get_element_levels(new_forest)
+# function trixi_t8_get_difference(old_forest :: Cptr, new_forest :: Cptr)
+function trixi_t8_get_difference(old_levels, new_levels)
 
   old_nelems = length(old_levels)
   new_nelems = length(new_levels)
@@ -569,10 +670,10 @@ function trixi_t8_get_difference(old_forest :: Cptr, new_forest :: Cptr)
       old_index += 1
       new_index += T8_CHILDREN
 
-    else if old_levels[old_index] > new_levels[new_index] 
+    elseif old_levels[old_index] > new_levels[new_index] 
       # Coarsend.
 
-      for child_index = old_index:old_index+T8_CHILDREN
+      for child_index = old_index:old_index+T8_CHILDREN-1
         changes[child_index] = -1
       end
 

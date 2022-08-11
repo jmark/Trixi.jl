@@ -2,7 +2,7 @@
 # Since these FMAs can increase the performance of many numerical algorithms,
 # we need to opt-in explicitly.
 # See https://ranocha.de/blog/Optimizing_EC_Trixi for further details.
-@muladd begin
+# @muladd begin
 
 
 """
@@ -450,10 +450,22 @@ function (amr_callback::AMRCallback)(u_ode::AbstractVector, mesh::T8codeMesh,
 
   has_changed = false
 
+  # println("## before adapt")
+
   @unpack controller, adaptor = amr_callback
 
   u = wrap_array(u_ode, mesh, equations, dg, cache)
   indicators = @trixi_timeit timer() "indicator" controller(u, mesh, equations, dg, cache, t=t, iter=iter)
+
+  # indicators[indicators .< 0] .= 0
+
+  # has_changed = indicators != 0
+
+  # println("has_changed = ", has_changed)
+
+  # if !has_changed
+  #   return has_changed
+  # end
 
   @boundscheck begin
     @assert axes(indicators) == (Base.OneTo(ncells(mesh)),) (
@@ -461,10 +473,14 @@ function (amr_callback::AMRCallback)(u_ode::AbstractVector, mesh::T8codeMesh,
     )
   end
 
-  changed_original_cells = @trixi_timeit timer() "mesh" adapt!(mesh,indicators)
+  differences = @trixi_timeit timer() "mesh" adapt!(mesh,indicators)
 
-  refined_original_cells   = changed_original_cells .==  1
-  coarsened_original_cells = changed_original_cells .== -1
+  element_ids = 1:length(differences)
+  refined_original_cells   = element_ids[differences .==  1]
+  coarsened_original_cells = element_ids[differences .== -1]
+
+  # println("refined   = ", refined_original_cells)
+  # println("coarsened = ", coarsened_original_cells)
 
   @trixi_timeit timer() "refine" if !only_coarsen
     @trixi_timeit timer() "solver" refine!(u_ode, adaptor, mesh, equations, dg, cache, refined_original_cells)
@@ -483,14 +499,17 @@ function (amr_callback::AMRCallback)(u_ode::AbstractVector, mesh::T8codeMesh,
                                                p_dg, p_cache, coarsened_original_cells)
     end
   end
+  # println("## after adapt")
 
   # Store whether there were any cells coarsened or refined and perform load balancing.
   has_changed = !isempty(refined_original_cells) || !isempty(coarsened_original_cells)
 
+  # println("has_changed = ", has_changed)
+
   # Check if mesh changed on other processes
-  if mpi_isparallel()
-    has_changed = MPI.Allreduce!(Ref(has_changed), |, mpi_comm())[]
-  end
+  # if mpi_isparallel()
+  #   has_changed = MPI.Allreduce!(Ref(has_changed), |, mpi_comm())[]
+  # end
 
   # if has_changed # TODO: Taal decide, where shall we set this?
   #   # don't set it to has_changed since there can be changes from earlier calls
@@ -512,8 +531,6 @@ function (amr_callback::AMRCallback)(u_ode::AbstractVector, mesh::T8codeMesh,
   return has_changed
 end
 
-
-
 function reinitialize_boundaries!(boundary_conditions::UnstructuredSortedBoundaryTypes, cache)
   # Reinitialize boundary types container because boundaries may have changed.
   initialize!(boundary_conditions, cache)
@@ -522,7 +539,6 @@ end
 function reinitialize_boundaries!(boundary_conditions, cache)
   return boundary_conditions
 end
-
 
 # After refining cells, shift original cell ids to match new locations
 # Note: Assumes sorted lists of original and refined cell ids!
@@ -860,4 +876,4 @@ include("amr_dg2d.jl")
 include("amr_dg3d.jl")
 
 
-end # @muladd
+# end # @muladd
