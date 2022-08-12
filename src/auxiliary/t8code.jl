@@ -1,6 +1,6 @@
 T8DIR = ENV["JULIA_T8CODE_PATH"]
 
-
+using Printf
 
 # foobar
 # println("aux = ", ENV["JULIA_T8CODE_PATH"])
@@ -82,8 +82,9 @@ const t8code_root_len = 1 << T8CODE_MAXLEVEL
 @t8_ccall(t8_init, Cvoid, log_threshold :: Cint = SC_LP_PRODUCTION)
 
 function init_t8code()
-  loglevel = SC_LP_VERBOSE
+  # loglevel = SC_LP_VERBOSE
   # loglevel = SC_LP_SILENT
+  loglevel = SC_LP_PRODUCTION
 
   sc_init(t8_mpi_comm(), 1, 1, C_NULL, loglevel)
   t8_init(loglevel)
@@ -391,14 +392,14 @@ function trixi_t8_count_interfaces(forest :: Cptr)
     end # for
   end # for
 
-  println("")
-  println("")
-  println(" ## local_num_elements = ", num_local_elements)
-  println(" ## local_num_conform  = ", local_num_conform)
-  println(" ## local_num_mortars  = ", local_num_mortars)
-  println(" ## local_num_boundry  = ", local_num_boundry)
-  println("")
-  println("")
+  # println("")
+  # println("")
+  # println(" ## local_num_elements = ", num_local_elements)
+  # println(" ## local_num_conform  = ", local_num_conform)
+  # println(" ## local_num_mortars  = ", local_num_mortars)
+  # println(" ## local_num_boundry  = ", local_num_boundry)
+  # println("")
+  # println("")
 
   return (interfaces = local_num_conform,
           mortars    = local_num_mortars,
@@ -616,11 +617,15 @@ function adapt_callback(forest,
   indicator_ptr = Ptr{Int}(t8_forest_get_user_data(forest))
   indicators = unsafe_wrap(Array,indicator_ptr,num_levels)
 
-  # println(indicators)
-
   offset = t8_forest_get_tree_element_offset(forest_from, which_tree)
 
+  # Only allow coarsening for complete families.
+  if indicators[offset + lelement_id + 1] < 0 && is_family == 0
+    return Cint(0)
+  end
+
   return Cint(indicators[offset + lelement_id + 1])
+
 end
 
 function trixi_t8_adapt_new(old_forest :: Cptr, indicators)
@@ -632,21 +637,18 @@ function trixi_t8_adapt_new(old_forest :: Cptr, indicators)
   t8_forest_init(new_forest_ref);
   new_forest = new_forest_ref[]
 
-  # println(indicators)
-
   let set_from = C_NULL, recursive = 0, set_for_coarsening = 0, no_repartition = 0
     t8_forest_set_user_data(new_forest, pointer(indicators))
     t8_forest_set_adapt(new_forest, old_forest, @t8_adapt_callback(adapt_callback), recursive)
     t8_forest_set_balance(new_forest, set_from, no_repartition)
     t8_forest_set_partition(new_forest, set_from, set_for_coarsening)
-  # c"t8_forest_set_ghost(new_forest, 1, c"T8_GHOST_FACES");
+    # c"t8_forest_set_ghost(new_forest, 1, c"T8_GHOST_FACES");
     t8_forest_commit(new_forest)
   end
 
   return new_forest
 end
 
-# function trixi_t8_get_difference(old_forest :: Cptr, new_forest :: Cptr)
 function trixi_t8_get_difference(old_levels, new_levels)
 
   old_nelems = length(old_levels)
@@ -662,6 +664,7 @@ function trixi_t8_get_difference(old_levels, new_levels)
   T8_CHILDREN = 4
 
   while old_index <= old_nelems && new_index <= new_nelems
+
     if old_levels[old_index] < new_levels[new_index] 
       # Refined.
     

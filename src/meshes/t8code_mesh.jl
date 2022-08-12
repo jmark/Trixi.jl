@@ -8,7 +8,6 @@ mutable struct T8codeMesh{NDIMS, RealT<:Real, IsParallel, NDIMSP2, NNODES} <: Ab
   cmesh                 :: Ptr{Cvoid} # cpointer to coarse mesh
   scheme                :: Ptr{Cvoid} # cpointer to element scheme
   forest                :: Ptr{Cvoid} # cpointer to forest
-  forest_cached         :: Ptr{Cvoid} # cpointer to a cached forest
   is_parallel           :: IsParallel
   # ghost                 :: Ghost # Either Ptr{t8code_ghost_t} or Ptr{t8code_hex_ghost_t}
   # Coordinates at the nodes specified by the tensor product of 'nodes' (NDIMS times).
@@ -19,6 +18,7 @@ mutable struct T8codeMesh{NDIMS, RealT<:Real, IsParallel, NDIMSP2, NNODES} <: Ab
   current_filename      :: String
   unsaved_changes       :: Bool
 
+  ncells                :: Int
   ninterfaces           :: Int
   nmortars              :: Int
   nboundaries           :: Int
@@ -44,7 +44,7 @@ mutable struct T8codeMesh{NDIMS, RealT<:Real, IsParallel, NDIMSP2, NNODES} <: Ab
     # ghost = ghost_new_t8code(t8code)
 
     mesh = new{NDIMS, eltype(tree_node_coordinates), typeof(is_parallel), NDIMS+2, length(nodes)}(
-      cmesh, scheme, forest, C_NULL, is_parallel, tree_node_coordinates, nodes, boundary_names, current_filename, unsaved_changes)
+      cmesh, scheme, forest, is_parallel, tree_node_coordinates, nodes, boundary_names, current_filename, unsaved_changes)
 
     # Destroy 't8code' structs when the mesh is garbage collected.
     finalizer(function (mesh::T8codeMesh{NDIMS})
@@ -64,7 +64,8 @@ SerialT8codeMesh{NDIMS} = T8codeMesh{NDIMS, <:Real, <:Val{false}}
 
 # TODO: What should be returned in case of parallel processes? Local vs global.
 @inline ntrees(mesh::T8codeMesh) = Int(t8_forest_get_num_global_trees(mesh.forest))
-@inline ncells(mesh::T8codeMesh) = Int(t8_forest_get_global_num_elements(mesh.forest))
+# @inline ncells(mesh::T8codeMesh) = Int(t8_forest_get_global_num_elements(mesh.forest))
+@inline ncells(mesh::T8codeMesh) = Int(t8_forest_get_local_num_elements(mesh.forest))
 @inline ninterfaces(mesh::T8codeMesh) = mesh.ninterfaces
 @inline nmortars(mesh::T8codeMesh) = mesh.nmortars
 @inline nboundaries(mesh::T8codeMesh) = mesh.nboundaries
@@ -199,38 +200,27 @@ function T8codeMesh(trees_per_dimension; polydeg,
 end
 
 function balance!(mesh::T8codeMesh{2}, init_fn=C_NULL)
-  # t8code_balance(mesh.t8code, T8CODE_DQUAD_CONNECT_FACE, init_fn)
   return nothing
 end
 
 function partition!(mesh::T8codeMesh{2}; allow_coarsening=true, weight_fn=C_NULL)
-  # t8code_partition(mesh.t8code, Int(allow_coarsening), weight_fn)
   return nothing
 end
 
-# Coarsen or refine marked cells and rebalance forest. Return a list of all
-# cells that have been adapted during coarsening/refinement or rebalancing.
+# Coarsen or refine marked cells and rebalance forest. Return a difference between
+# old and new mesh.
 function adapt!(mesh::T8codeMesh, indicators)
 
-  println("## begin t8code_adapt!")
   old_levels = trixi_t8_get_local_element_levels(mesh.forest)
 
-  mesh.forest_cached = trixi_t8_adapt_new(mesh.forest, indicators)
+  forest_cached = trixi_t8_adapt_new(mesh.forest, indicators)
 
-  new_levels = trixi_t8_get_local_element_levels(mesh.forest_cached)
+  new_levels = trixi_t8_get_local_element_levels(forest_cached)
 
-  # differences = trixi_t8_get_difference(mesh.forest, mesh.forest_cached)
   differences = trixi_t8_get_difference(old_levels, new_levels)
 
   trixi_t8_unref_forest(mesh.forest)
-  mesh.forest = mesh.forest_cached
-  println("## end t8code_adapt!")
+  mesh.forest = forest_cached
 
   return differences
 end
-
-# Coarsen marked cells if the forest will stay balanced.
-# Return a list of all cells that have been coarsened.
-# function coarsen!(mesh::T8codeMesh)
-#   return nothing
-# end

@@ -72,7 +72,7 @@ function rebalance_solver!(u_ode::AbstractVector, mesh::TreeMesh{2}, equations,
 end
 
 # Refine elements in the DG solver based on a list of cell_ids that should be refined
-function refine!(u_ode::AbstractVector, adaptor, mesh::Union{TreeMesh{2}, P4estMesh{2}, T8codeMesh{2}},
+function refine!(u_ode::AbstractVector, adaptor, mesh::Union{TreeMesh{2}, P4estMesh{2}},
                  equations, dg::DGSEM, cache, elements_to_refine)
   # Return early if there is nothing to do
   if isempty(elements_to_refine)
@@ -91,6 +91,7 @@ function refine!(u_ode::AbstractVector, adaptor, mesh::Union{TreeMesh{2}, P4estM
   # Retain current solution data
   old_n_elements = nelements(dg, cache)
   old_u_ode = copy(u_ode)
+
   GC.@preserve old_u_ode begin # OBS! If we don't GC.@preserve old_u_ode, it might be GC'ed
     old_u = wrap_array(old_u_ode, mesh, equations, dg, cache)
 
@@ -98,8 +99,6 @@ function refine!(u_ode::AbstractVector, adaptor, mesh::Union{TreeMesh{2}, P4estM
 
     resize!(u_ode, nvariables(equations) * nnodes(dg)^ndims(mesh) * nelements(dg, cache))
     u = wrap_array(u_ode, mesh, equations, dg, cache)
-
-    println("## size(u) = ", size(u))
 
     # Loop over all elements in old container and either copy them or refine them
     element_id = 1
@@ -217,6 +216,9 @@ function coarsen!(u_ode::AbstractVector, adaptor, mesh::Union{TreeMesh{2}, P4est
   # Retain current solution data
   old_n_elements = nelements(dg, cache)
   old_u_ode = copy(u_ode)
+
+  # println("## coarsen: old_n_elements = ", old_n_elements)
+
   GC.@preserve old_u_ode begin # OBS! If we don't GC.@preserve old_u_ode, it might be GC'ed
     old_u = wrap_array(old_u_ode, mesh, equations, dg, cache)
 
@@ -333,5 +335,78 @@ function create_cache(::Type{ControllerThreeLevelCombined}, mesh::TreeMesh{2}, e
   return (; controller_value)
 end
 
+# Coarsen and refine elements in the DG solver based on a difference list.
+function adapt!(u_ode::AbstractVector, adaptor, mesh::T8codeMesh{2}, equations, dg::DGSEM, cache, difference)
+
+  # Return early if there is nothing to do.
+  if !any(difference .!= 0)
+    if mpi_isparallel()
+      # MPICache init uses all-to-all communication -> reinitialize even if there is nothing to do
+      # locally (there still might be other MPI ranks that have refined elements).
+      reinitialize_containers!(mesh, equations, dg, cache)
+    end
+    return nothing
+  end
+
+  # Number of (local) cells/elements.
+  old_nelems = nelements(dg, cache)
+  new_nelems = ncells(mesh)
+
+  # Local element indices.
+  old_index = 1
+  new_index = 1
+
+  # TODO: Make general for 2D/3D and hybrid grids.
+  T8_CHILDREN = 4
+
+  # Retain current solution data.
+  old_u_ode = copy(u_ode)
+
+  GC.@preserve old_u_ode begin
+    old_u = wrap_array(old_u_ode, mesh, equations, dg, cache)
+
+    reinitialize_containers!(mesh, equations, dg, cache)
+
+    resize!(u_ode, nvariables(equations) * nnodes(dg)^ndims(mesh) * nelements(dg, cache))
+    u = wrap_array(u_ode, mesh, equations, dg, cache)
+
+    while old_index <= old_nelems && new_index <= new_nelems
+
+      if difference[old_index] > 0 # Refine.
+
+        # Refine element and store solution directly in new data structure.
+        refine_element!(u, new_index, old_u, old_index, adaptor, equations, dg)
+
+        old_index += 1
+        new_index += T8_CHILDREN
+
+      elseif difference[old_index] < 0 # Coarsen.
+
+        # If an element is to be removed, sanity check if the following elements
+        # are also marked - otherwise there would be an error in the way the
+        # cells/elements are sorted.
+        @assert all(difference[old_index:(old_index+T8_CHILDREN-1)] .< 0) "bad cell/element order"
+
+        # Coarsen elements and store solution directly in new data structure.
+        coarsen_elements!(u, new_index, old_u, old_index, adaptor, equations, dg)
+
+        old_index += T8_CHILDREN
+        new_index += 1
+
+      else # No changes.
+
+        # Copy old element data to new element container.
+        @views u[:, .., new_index] .= old_u[:, .., old_index]
+
+        old_index += 1
+        new_index += 1
+      end
+
+    end # while
+
+  end # GC.@preserve old_u_ode
+
+  return nothing
+end
 
 end # @muladd
