@@ -150,8 +150,6 @@ const IndicatorLoehner = IndicatorLöhner
   return num / den
 end
 
-
-
 struct IndicatorMax{Variable, Cache<:NamedTuple} <: AbstractIndicator
   variable::Variable
   cache::Cache

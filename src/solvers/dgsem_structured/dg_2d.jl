@@ -81,7 +81,7 @@ end
 
 
 @inline function split_form_kernel!(du, u,
-                                    element, mesh::Union{StructuredMesh{2}, UnstructuredMesh2D, P4estMesh{2}},
+                                    element, mesh::Union{StructuredMesh{2}, UnstructuredMesh2D, P4estMesh{2}, T8codeMesh{2}},
                                     nonconservative_terms::Val{false}, equations,
                                     volume_flux, dg::DGSEM, cache, alpha=true)
   @unpack derivative_split = dg.basis
@@ -189,7 +189,7 @@ end
 # "A provably entropy stable subcell shock capturing approach for high order split form DG for the compressible Euler equations"
 # [arXiv: 2008.12044v2](https://arxiv.org/pdf/2008.12044)
 @inline function calcflux_fv!(fstar1_L, fstar1_R, fstar2_L, fstar2_R, u,
-                              mesh::Union{StructuredMesh{2}, UnstructuredMesh2D, P4estMesh{2}},
+                              mesh::Union{StructuredMesh{2}, UnstructuredMesh2D, P4estMesh{2}, T8codeMesh{2}},
                               nonconservative_terms::Val{false}, equations,
                               volume_flux_fv, dg::DGSEM, element, cache)
   @unpack contravariant_vectors = cache.elements

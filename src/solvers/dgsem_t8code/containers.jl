@@ -96,6 +96,7 @@ end
 # ============================================================================ #
 
 function reinitialize_containers!(mesh::T8codeMesh, equations, dg::DGSEM, cache)
+
   # Re-initialize elements container.
   @unpack elements = cache
   resize!(elements, ncells(mesh))

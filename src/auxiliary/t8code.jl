@@ -1,7 +1,5 @@
 T8DIR = ENV["JULIA_T8CODE_PATH"]
 
-using Printf
-
 # foobar
 # println("aux = ", ENV["JULIA_T8CODE_PATH"])
 
@@ -9,10 +7,7 @@ libt8 = "$(T8DIR)/lib/libt8.so"
 # libsc = "$(T8DIR)/lib/libsc.so"
 # libp4 = "/home/jmark/install/t8code/lib/libt8.so"
 
-struct t8_forest end
-
 Cptr = Ptr{Cvoid}
-CChar = UInt8
 MPI_Comm_t = Cptr
 t8_locidx_t = Int32
 
@@ -83,8 +78,8 @@ const t8code_root_len = 1 << T8CODE_MAXLEVEL
 
 function init_t8code()
   # loglevel = SC_LP_VERBOSE
-  # loglevel = SC_LP_SILENT
-  loglevel = SC_LP_PRODUCTION
+  loglevel = SC_LP_SILENT
+  # loglevel = SC_LP_PRODUCTION
 
   sc_init(t8_mpi_comm(), 1, 1, C_NULL, loglevel)
   t8_init(loglevel)
@@ -635,7 +630,7 @@ function trixi_t8_adapt_new(old_forest :: Cptr, indicators)
   # Init new forest.
   new_forest_ref = Ref{Ptr{Cptr}}()
   t8_forest_init(new_forest_ref);
-  new_forest = new_forest_ref[]
+  new_forest :: Cptr = new_forest_ref[]
 
   let set_from = C_NULL, recursive = 0, set_for_coarsening = 0, no_repartition = 0
     t8_forest_set_user_data(new_forest, pointer(indicators))
