@@ -118,7 +118,7 @@ function rhs!(du, u, t,
    #  println("vf: du[$e]")
    #  for i = 1:4
    #    for j = 1:4
-   #      @printf( "%24.20f", du[1,i,j,e])
+   #      @printf( "%24.16e", du[1,i,j,e])
    #    end
    #  println("")
    #  end
@@ -165,7 +165,7 @@ function rhs!(du, u, t,
    #  println("sf: du[$e]")
    #  for i = 1:4
    #    for j = 1:4
-   #      @printf( "%24.20f", du[1,i,j,e])
+   #      @printf( "%24.16e", du[1,i,j,e])
    #    end
    #  println("")
    #  end

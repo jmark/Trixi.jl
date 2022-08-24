@@ -361,7 +361,7 @@ end
 
 function init_surfaces!(interfaces, mortars, boundaries, mesh::T8codeMesh)
 
-  trixi_t8_fill_interfaces(mesh.forest, interfaces, mortars, boundaries)
+  trixi_t8_fill_interfaces(mesh.forest, interfaces, mortars, boundaries, mesh.boundary_names)
 
   return nothing
 end

@@ -1,15 +1,14 @@
 T8DIR = ENV["JULIA_T8CODE_PATH"]
-
-# foobar
-# println("aux = ", ENV["JULIA_T8CODE_PATH"])
-
 libt8 = "$(T8DIR)/lib/libt8.so"
+
 # libsc = "$(T8DIR)/lib/libsc.so"
 # libp4 = "/home/jmark/install/t8code/lib/libt8.so"
 
 Cptr = Ptr{Cvoid}
 MPI_Comm_t = Cptr
 t8_locidx_t = Int32
+t8_gloidx_t = Int64
+p4_topidx_t = Int32
 
 const SC_LP_DEFAULT    =  -1     # /**< this selects the SC default threshold */
 const SC_LP_ALWAYS     =   0     # /**< this will log everything */
@@ -76,12 +75,16 @@ const t8code_root_len = 1 << T8CODE_MAXLEVEL
 @t8_ccall(sc_init, Cvoid, comm :: MPI_Comm_t, catch_signals :: Cint, print_backtrace :: Cint, log_handler :: Cptr, log_threshold :: Cint)
 @t8_ccall(t8_init, Cvoid, log_threshold :: Cint = SC_LP_PRODUCTION)
 
+# void p4est_init (sc_log_handler_t log_handler, int log_threshold);
+@t8_ccall(p4est_init, Cvoid, log_handler :: Cptr, log_threshold :: Cint)
+
 function init_t8code()
   # loglevel = SC_LP_VERBOSE
   loglevel = SC_LP_SILENT
   # loglevel = SC_LP_PRODUCTION
 
   sc_init(t8_mpi_comm(), 1, 1, C_NULL, loglevel)
+  p4est_init(C_NULL, loglevel)
   t8_init(loglevel)
   return nothing
 end
@@ -143,9 +146,40 @@ end
 
 @t8_ccall(t8_cmesh_new_periodic, Cptr, comm :: MPI_Comm_t, ndim :: Cint)
 @t8_ccall(t8_cmesh_new_periodic_hybrid, Cptr, comm :: MPI_Comm_t)
+
+
+
 @t8_ccall(t8_forest_get_num_global_trees, t8_locidx_t, forest :: Cptr)
 @t8_ccall(t8_forest_get_global_num_elements, t8_locidx_t, forest :: Cptr)
+
+# t8_cmesh_t t8_cmesh_new_from_p4est (p4est_connectivity_t * conn, sc_MPI_Comm comm, int do_partition);
 @t8_ccall(t8_cmesh_new_from_p4est, Cptr, conn :: Cptr, comm :: MPI_Comm_t, do_partition :: Cint)
+
+# t8_cmesh_t t8_cmesh_new_from_p8est (p8est_connectivity_t * conn, sc_MPI_Comm comm, int do_partition);
+@t8_ccall(t8_cmesh_new_from_p8est, Cptr, conn :: Cptr, comm :: MPI_Comm_t, do_partition :: Cint)
+
+# t8_cmesh_t t8_cmesh_from_msh_file (const char *fileprefix, int partition, sc_MPI_Comm comm, int dim, int master, int use_occ_geometry);
+@t8_ccall(t8_cmesh_from_msh_file, Cptr, fileprefix :: Cstring, partition :: Cint, comm :: MPI_Comm_t, dim :: Cint, master :: Cint, use_occ_geometry :: Cint)
+
+# double *t8_cmesh_get_tree_vertices (t8_cmesh_t cmesh, t8_locidx_t ltreeid);
+@t8_ccall(t8_cmesh_get_tree_vertices, Ptr{Cdouble}, cmesh :: Ptr{Cvoid}, ltreeid :: t8_locidx_t)
+
+# /** Return the global number of trees in a cmesh.
+#  * \param [in] cmesh       The cmesh to be considered.
+#  * \return                 The number of trees associated to \a cmesh.
+#  * \a cmesh must be committed before calling this function.
+#  */
+# t8_gloidx_t         t8_cmesh_get_num_trees (t8_cmesh_t cmesh);
+@t8_ccall(t8_cmesh_get_num_trees, t8_gloidx_t, cmesh :: Ptr{Cvoid})
+
+# /** Return the number of local trees of a cmesh.
+#  *  If the cmesh is not partitioned this is equivalent to \ref t8_cmesh_get_num_trees.
+#  * \param [in] cmesh       The cmesh to be considered.
+#  * \return                 The number of local trees of the cmesh.
+#  * \a cmesh must be committed before calling this function.
+#  */
+# t8_locidx_t         t8_cmesh_get_num_local_trees (t8_cmesh_t cmesh);
+@t8_ccall(t8_cmesh_get_num_local_trees, t8_locidx_t, cmesh :: Ptr{Cvoid})
 
 # t8_locidx_t t8_forest_get_num_ghosts (t8_forest_t forest);
 @t8_ccall(t8_forest_get_num_ghosts, t8_locidx_t, forest :: Cptr)
@@ -174,7 +208,16 @@ end
 #                                                    t8_locidx_t leid_in_tree);
 @t8_ccall(t8_forest_get_element_in_tree, Cptr, forest :: Cptr, ltreeid :: t8_locidx_t, leid_in_tree :: t8_locidx_t)
 
-
+# /** Compute the coordinates of a given element vertex inside a reference tree
+#  *  that is embedded into [0,1]^d (d = dimension).
+#  * \param [in] ts     Implementation of a class scheme.
+#  * \param [in] t      The element to be considered.
+#  * \param [in] vertex The id of the vertex whose coordinates shall be computed.
+#  * \param [out] coords An array of at least as many doubles as the element's dimension
+#  *                      whose entries will be filled with the coordinates of \a vertex.
+#  */
+# void t8_element_vertex_reference_coords (t8_eclass_scheme_c *ts, const t8_element_t *t, int vertex, double coords[]);
+@t8_ccall(t8_element_vertex_reference_coords, Cvoid, ts :: Cptr, element :: Cptr, vertex :: Cint, coordinates :: Ptr{Cdouble})
 
 # function t8_cmesh_new_from_p4est(conn, do_partition = 0) :: Cptr
 #   # cmesh = c"t8_cmesh_new_from_p4est"(conn, comm, do_partition)
@@ -306,6 +349,55 @@ end
   pneigh_scheme       :: Cptr,
   forest_is_balanced  :: Cint)
 
+# /** Allocate a connectivity structure and populate from constants.
+#  * The attribute fields are initialized to NULL.
+#  * \param [in] num_vertices   Number of total vertices (i.e. geometric points).
+#  * \param [in] num_trees      Number of trees in the forest.
+#  * \param [in] num_corners    Number of tree-connecting corners.
+#  * \param [in] coff           Corner-to-tree offsets (num_corners + 1 values).
+#  *                            This must always be non-NULL; in trivial cases
+#  *                            it is just a pointer to a p4est_topix value of 0.
+#  * \return                    The connectivity is checked for validity.
+#  */
+# p4est_connectivity_t *p4est_connectivity_new_copy (p4est_topidx_t num_vertices,
+#                                                    p4est_topidx_t num_trees,
+#                                                    p4est_topidx_t num_corners,
+#                                                    const double *vertices,
+#                                                    const p4est_topidx_t * ttv,
+#                                                    const p4est_topidx_t * ttt,
+#                                                    const int8_t * ttf,
+#                                                    const p4est_topidx_t * ttc,
+#                                                    const p4est_topidx_t * coff,
+#                                                    const p4est_topidx_t * ctt,
+#                                                    const int8_t * ctc);
+@t8_ccall(p4est_connectivity_new_copy, Cptr,
+  num_vertices  :: p4est_topidx_t,
+  num_trees     :: p4est_topidx_t,
+  num_corners   :: p4est_topidx_t,
+  vertices      :: Ptr{Cdouble},
+  ttv           :: Ptr{p4est_topidx_t},
+  ttt           :: Ptr{p4est_topidx_t},
+  ttf           :: Ptr{Int8},
+  ttc           :: Ptr{p4est_topidx_t},
+  coff          :: Ptr{p4est_topidx_t},
+  ctt           :: Ptr{p4est_topidx_t},
+  ctc           :: Ptr{Int8})
+
+# /** Examine a connectivity structure.
+#  * \return          Returns true if structure is valid, false otherwise.
+#  */
+# int p4est_connectivity_is_valid (p4est_connectivity_t *connectivity);
+@t8_ccall(p4est_connectivity_is_valid, Cint, connectivity :: Cptr)
+
+# void p4est_connectivity_destroy (p4est_connectivity_t *connectivity);
+@t8_ccall(p4est_connectivity_destroy, Cvoid, connectivity :: Cptr)
+
+# p4est_connectivity_t *p4est_connectivity_new_brick (int mi, int ni, int periodic_a, int periodic_b);
+@t8_ccall(p4est_connectivity_new_brick, Ptr{Cvoid}, mi :: Cint, ni :: Cint, periodic_a :: Cint, periodic_b :: Cint)
+
+# p4est_connectivity_t *p4est_connectivity_read_inp (const char *filename);
+@t8_ccall(p4est_connectivity_read_inp, Ptr{Cvoid}, filename :: Cstring)
+
 function trixi_t8_unref_forest(forest :: Cptr)
   t8_forest_unref(Ref(forest))
 end
@@ -357,7 +449,7 @@ function trixi_t8_count_interfaces(forest :: Cptr)
           pelement_indices_ref, pneigh_scheme_ref, forest_is_balanced)
 
         num_neighbors      = num_neighbors_ref[]
-        dual_faces         = unsafe_wrap(Array,dual_faces_ref[],num_neighbors)
+        # dual_faces         = unsafe_wrap(Array,dual_faces_ref[],num_neighbors)
         neighbor_ielements = unsafe_wrap(Array,pelement_indices_ref[],num_neighbors)
         neighbor_leafs     = unsafe_wrap(Array,pneighbor_leafs_ref[],num_neighbors)
         neighbor_scheme    = pneigh_scheme_ref[]
@@ -388,12 +480,10 @@ function trixi_t8_count_interfaces(forest :: Cptr)
   end # for
 
   # println("")
-  # println("")
   # println(" ## local_num_elements = ", num_local_elements)
   # println(" ## local_num_conform  = ", local_num_conform)
   # println(" ## local_num_mortars  = ", local_num_mortars)
   # println(" ## local_num_boundry  = ", local_num_boundry)
-  # println("")
   # println("")
 
   return (interfaces = local_num_conform,
@@ -401,7 +491,7 @@ function trixi_t8_count_interfaces(forest :: Cptr)
           boundaries = local_num_boundry)
 end
 
-function trixi_t8_fill_interfaces(forest :: Cptr, interfaces, mortars, boundaries)
+function trixi_t8_fill_interfaces(forest :: Cptr, interfaces, mortars, boundaries, boundary_names)
   # /* Check that forest is a committed, that is valid and usable, forest. */
   @T8_ASSERT (t8_forest_is_committed(forest) != 0);
 
@@ -467,7 +557,8 @@ function trixi_t8_fill_interfaces(forest :: Cptr, interfaces, mortars, boundarie
               orientation = 0 # aligned in z-order
 
               # Last entry is the large element ... What a stupid convention!
-              mortars.neighbor_ids[end, mortar_id] = ielement + 1
+              # mortars.neighbor_ids[end, mortar_id] = ielement + 1
+              mortars.neighbor_ids[end, mortar_id] = current_index + 1
 
               # First `1:end-1` entries are the smaller elements.
               mortars.neighbor_ids[1:end-1, mortar_id] .= neighbor_ielements[:] .+ 1
@@ -478,24 +569,24 @@ function trixi_t8_fill_interfaces(forest :: Cptr, interfaces, mortars, boundarie
                 # relative to the mortar.
                 if side == 1 || orientation == 0
                   # Forward indexing for small side or orientation == 0
-                  i = :i_forward
+                  indexing = :i_forward
                 else
                   # Backward indexing for large side with reversed orientation
-                  i = :i_backward
+                  indexing = :i_backward
                 end
 
                 if faces[side] == 0
                   # Index face in negative x-direction
-                  mortars.node_indices[side, mortar_id] = (:begin, i)
+                  mortars.node_indices[side, mortar_id] = (:begin, indexing)
                 elseif faces[side] == 1
                   # Index face in positive x-direction
-                  mortars.node_indices[side, mortar_id] = (:end, i)
+                  mortars.node_indices[side, mortar_id] = (:end, indexing)
                 elseif faces[side] == 2
                   # Index face in negative y-direction
-                  mortars.node_indices[side, mortar_id] = (i, :begin)
+                  mortars.node_indices[side, mortar_id] = (indexing, :begin)
                 else # faces[side] == 3
                   # Index face in positive y-direction
-                  mortars.node_indices[side, mortar_id] = (i, :end)
+                  mortars.node_indices[side, mortar_id] = (indexing, :end)
                 end
               end
 
@@ -508,8 +599,11 @@ function trixi_t8_fill_interfaces(forest :: Cptr, interfaces, mortars, boundarie
               orientation = 0 # aligned in z-order
 
               # Write data to interfaces container.
-              interfaces.neighbor_ids[1, interface_id] = ielement + 1
+              interfaces.neighbor_ids[1, interface_id] = current_index + 1
               interfaces.neighbor_ids[2, interface_id] = neighbor_ielements[1] + 1
+
+              # println("neighbor_ids = ", interfaces.neighbor_ids[:,interface_id])
+              # println("faces = ", faces)
 
               # Iterate over primary and secondary element.
               for side in 1:2
@@ -518,40 +612,63 @@ function trixi_t8_fill_interfaces(forest :: Cptr, interfaces, mortars, boundarie
                 # relative to the interface.
                 if side == 1 || orientation == 0
                   # Forward indexing
-                  i = :i_forward
+                  indexing = :i_forward
                 else
                   # Backward indexing
-                  i = :i_backward
+                  indexing = :i_backward
                 end
 
                 if faces[side] == 0
                   # Index face in negative x-direction
-                  interfaces.node_indices[side, interface_id] = (:begin, i)
+                  interfaces.node_indices[side, interface_id] = (:begin, indexing)
                 elseif faces[side] == 1
                   # Index face in positive x-direction
-                  interfaces.node_indices[side, interface_id] = (:end, i)
+                  interfaces.node_indices[side, interface_id] = (:end, indexing)
                 elseif faces[side] == 2
                   # Index face in negative y-direction
-                  interfaces.node_indices[side, interface_id] = (i, :begin)
+                  interfaces.node_indices[side, interface_id] = (indexing, :begin)
                 else # faces[side] == 3
                   # Index face in positive y-direction
-                  interfaces.node_indices[side, interface_id] = (i, :end)
+                  interfaces.node_indices[side, interface_id] = (indexing, :end)
                 end
               end
           end
 
         # Domain boundary.
         else
-
           local_num_boundry += 1
+          boundary_id = local_num_boundry
 
+          boundaries.neighbor_ids[boundary_id] = current_index + 1
+
+          # println("neighbor_id = ", boundaries.neighbor_ids[boundary_id])
+          # println("face = ", iface)
+
+          if iface == 0
+            # Index face in negative x-direction
+            boundaries.node_indices[boundary_id] = (:begin, :i_forward)
+          elseif iface == 1
+            # Index face in positive x-direction
+            boundaries.node_indices[boundary_id] = (:end, :i_forward)
+          elseif iface == 2
+            # Index face in negative y-direction
+            boundaries.node_indices[boundary_id] = (:i_forward, :begin)
+          else # iface == 3
+            # Index face in positive y-direction
+            boundaries.node_indices[boundary_id] = (:i_forward, :end)
+          end
+
+          # One-based indexing
+          boundaries.name[boundary_id] = boundary_names[iface + 1, itree + 1]
         end
      
         t8_free(dual_faces_ref[])
         t8_free(pneighbor_leafs_ref[])
         t8_free(pelement_indices_ref[])
 
-      end # for
+      end # for iface = ...
+
+      # println("")
 
       current_index += 1
     end # for

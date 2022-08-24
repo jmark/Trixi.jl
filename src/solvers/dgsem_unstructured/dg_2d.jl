@@ -290,7 +290,7 @@ end
 
 # TODO: Taal dimension agnostic
 function calc_boundary_flux!(cache, t, boundary_condition::BoundaryConditionPeriodic,
-                             mesh::Union{UnstructuredMesh2D, P4estMesh},
+                             mesh::Union{UnstructuredMesh2D, P4estMesh, T8codeMesh},
                              equations, surface_integral, dg::DG)
   @assert isempty(eachboundary(dg, cache))
 end
@@ -298,7 +298,7 @@ end
 
 # Function barrier for type stability
 function calc_boundary_flux!(cache, t, boundary_conditions,
-                             mesh::Union{UnstructuredMesh2D, P4estMesh},
+                             mesh::Union{UnstructuredMesh2D, P4estMesh, T8codeMesh},
                              equations, surface_integral, dg::DG)
   @unpack boundary_condition_types, boundary_indices = boundary_conditions
 
@@ -312,7 +312,7 @@ end
 # in a type-stable way using "lispy tuple programming".
 function calc_boundary_flux_by_type!(cache, t, BCs::NTuple{N,Any},
                                      BC_indices::NTuple{N,Vector{Int}},
-                                     mesh::Union{UnstructuredMesh2D, P4estMesh},
+                                     mesh::Union{UnstructuredMesh2D, P4estMesh, T8codeMesh},
                                      equations, surface_integral, dg::DG) where {N}
   # Extract the boundary condition type and index vector
   boundary_condition = first(BCs)
@@ -335,7 +335,7 @@ end
 
 # terminate the type-stable iteration over tuples
 function calc_boundary_flux_by_type!(cache, t, BCs::Tuple{}, BC_indices::Tuple{},
-                                     mesh::Union{UnstructuredMesh2D, P4estMesh},
+                                     mesh::Union{UnstructuredMesh2D, P4estMesh, T8codeMesh},
                                      equations, surface_integral, dg::DG)
   nothing
 end

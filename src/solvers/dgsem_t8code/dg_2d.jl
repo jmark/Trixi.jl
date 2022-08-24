@@ -179,10 +179,6 @@ end
 
   flux_ = surface_flux(u_ll, u_rr, normal_direction, equations)
 
-  # if normal_direction[1] > 1e-10
-  #   println("interface flux = $flux_; n = $normal_direction")
-  # end
-
   for v in eachvariable(equations)
     surface_flux_values[v, primary_node_index, primary_direction_index, primary_element_index] = flux_[v]
     surface_flux_values[v, secondary_node_index, secondary_direction_index, secondary_element_index] = -flux_[v]
@@ -232,6 +228,7 @@ function prolong2boundaries!(cache, u,
   index_range = eachnode(dg)
 
   @threaded for boundary in eachboundary(dg, cache)
+
     # Copy solution data from the element using "delayed indexing" with
     # a start value and a step size to get the correct face and orientation.
     element       = boundaries.neighbor_ids[boundary]
@@ -261,12 +258,9 @@ function calc_boundary_flux!(cache, t, boundary_condition, boundary_indexing,
   @unpack surface_flux_values = cache.elements
   index_range = eachnode(dg)
 
-  @threaded for local_index in eachindex(boundary_indexing)
-    # Use the local index to get the global boundary index from the pre-sorted list.
-    boundary = boundary_indexing[local_index]
-
+  @threaded for boundary in eachboundary(dg, cache)
     # Get information on the adjacent element, compute the surface fluxes,
-    # and store them
+    # and store them.
     element       = boundaries.neighbor_ids[boundary]
     node_indices  = boundaries.node_indices[boundary]
     direction     = indices2direction(node_indices)
@@ -311,6 +305,8 @@ end
   x = get_node_coords(node_coordinates, equations, dg, i_index, j_index, element_index)
 
   flux_ = boundary_condition(u_inner, normal_direction, x, t, surface_flux, equations)
+
+  # println("flux_[$node_index,$direction_index,$element_index] = ", flux_)
 
   # Copy flux to element storage in the correct orientation.
   for v in eachvariable(equations)

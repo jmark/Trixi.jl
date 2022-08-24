@@ -64,8 +64,6 @@ using TriplotRecipes: DGTriPseudocolor
 @reexport using UnPack: @unpack
 using UnPack: @pack!
 
-using Infiltrator
-
 # finite difference SBP operators
 using SummationByPartsOperators: AbstractDerivativeOperator,
   AbstractNonperiodicDerivativeOperator, DerivativeOperator,
@@ -224,7 +222,7 @@ export PlotData1D, PlotData2D, ScalarPlotData2D, getmesh, adapt_to_mesh_level!, 
 function __init__()
   init_mpi()
 
-  init_p4est()
+  # init_p4est()
   init_t8code()
 
   # Enable features that depend on the availability of the Plots package

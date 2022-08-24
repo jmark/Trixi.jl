@@ -1,0 +1,31 @@
+set parametric
+
+set trange [-1:1]
+set xrange [-1:1]
+set yrange [-1:1]
+
+set grid
+unset key
+set size ratio 1
+
+set title "Waving Flag Mapping"
+
+f1_x(t) = -1.0 + 0.1*sin(pi*t)
+f1_y(t) = t
+
+f2_x(t) = 1.0 + 0.1*sin(pi*t)
+f2_y(t) = t
+
+f3_x(t) = t
+f3_y(t) = -1.0 + 0.2*sin(pi*t)
+
+f4_x(t) = t
+f4_y(t) =  1.0 + 0.2*sin(pi*t)
+
+scaling = 0.5
+
+plot \
+  scaling*f1_x(t),scaling*f1_y(t) lw 2, \
+  scaling*f2_x(t),scaling*f2_y(t) lw 2, \
+  scaling*f3_x(t),scaling*f3_y(t) lw 2, \
+  scaling*f4_x(t),scaling*f4_y(t) lw 2

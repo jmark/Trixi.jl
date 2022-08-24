@@ -1,4 +1,3 @@
-
 using OrdinaryDiffEq
 using Trixi
 
@@ -29,6 +28,7 @@ function initial_condition_kelvin_helmholtz_instability(x, t, equations::Compres
   p = 1.0
   return prim2cons(SVector(rho, v1, v2, p), equations)
 end
+
 initial_condition = initial_condition_kelvin_helmholtz_instability
 
 surface_flux = flux_lax_friedrichs
@@ -50,14 +50,9 @@ volume_integral = VolumeIntegralShockCapturingHG(indicator_sc;
                                                  volume_flux_fv=surface_flux)
 
 solver = DGSEM(basis, surface_flux, volume_integral)
-# solver = DGSEM(polydeg=polydeg, surface_flux=surface_flux)
 
 coordinates_min = (-1.0, -1.0)
 coordinates_max = ( 1.0,  1.0)
-
-# mesh = TreeMesh(coordinates_min, coordinates_max,
-#                 initial_refinement_level=5,
-#                 n_cells_max=100_000)
 
 trees_per_dimension = (1, 1)
 mesh = T8codeMesh(trees_per_dimension,polydeg=polydeg, initial_refinement_level=inilevel,
@@ -65,11 +60,10 @@ mesh = T8codeMesh(trees_per_dimension,polydeg=polydeg, initial_refinement_level=
 
 semi = SemidiscretizationHyperbolic(mesh, equations, initial_condition, solver)
 
-
 ###############################################################################
 # ODE solvers, callbacks etc.
 
-tspan = (0.0, 2.9)
+tspan = (0.0, 3.0)
 # tspan = (0.0, 1.7)
 ode = semidiscretize(semi, tspan)
 
@@ -99,13 +93,12 @@ amr_callback = AMRCallback(semi, amr_controller,
                            adapt_initial_condition=true,
                            adapt_initial_condition_only_refine=true)
 
-stepsize_callback = StepsizeCallback(cfl=1.3)
+stepsize_callback = StepsizeCallback(cfl=0.8)
 
 callbacks = CallbackSet(summary_callback,
                         analysis_callback, alive_callback,
                         # save_solution,
                         amr_callback, stepsize_callback)
-
 
 ###############################################################################
 # run the simulation
