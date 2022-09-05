@@ -17,7 +17,7 @@ f2_x(t) = 1.0 + 0.1*sin(pi*t)
 f2_y(t) = t
 
 f3_x(t) = t
-f3_y(t) = -1.0 + 0.2*sin(pi*t)
+f3_y(t) = -1.0 + 0.2*sin(2*pi*t)
 
 f4_x(t) = t
 f4_y(t) =  1.0 + 0.2*sin(pi*t)

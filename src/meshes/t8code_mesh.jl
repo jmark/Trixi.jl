@@ -185,6 +185,17 @@ function T8codeMesh(trees_per_dimension; polydeg,
 
 end
 
+function split_filename(filename)
+
+  i = findlast(==('.'),filename)
+
+  if isnothing(i)
+    return filename
+  end
+
+  return filename[1:i-1],filename[i+1:end]
+
+end
 
 """
     T8codeMesh{NDIMS}(meshfile::String;
@@ -246,8 +257,8 @@ For example, if a two-dimensional base mesh contains 25 elements then setting
 function T8codeMesh{NDIMS}(meshfile::String;
                           mapping=nothing, polydeg=1, RealT=Float64,
                           initial_refinement_level=0, unsaved_changes=true) where NDIMS
-  # Prevent `p4est` from crashing Julia if the file doesn't exist.
-  # @assert isfile(meshfile)
+  # Prevent `t8code` from crashing Julia if the file doesn't exist.
+  @assert isfile(meshfile)
   
   coordinates_min = (-1.0, -1.0)
   coordinates_max = ( 1.0,  1.0)
@@ -255,13 +266,15 @@ function T8codeMesh{NDIMS}(meshfile::String;
   # mapping = coordinates2mapping(coordinates_min, coordinates_max)
 
   # Create the mesh connectivity using `p4est`.
-  conn = p4est_connectivity_read_inp(meshfile)
+  # conn = p4est_connectivity_read_inp(meshfile)
 
   # do_partition = 0
   # cmesh = t8_cmesh_new_from_p4est(conn,t8_mpi_comm(),do_partition)
   # p4est_connectivity_destroy(conn)
 
-  cmesh = t8_cmesh_from_msh_file(meshfile, 0, t8_mpi_comm(), 2, 0, 0)
+  meshfile_prefix, meshfile_suffix = split_filename(meshfile)
+
+  cmesh = t8_cmesh_from_msh_file(meshfile_prefix, 0, t8_mpi_comm(), 2, 0, 0)
 
   # error("debug")
 
@@ -293,22 +306,22 @@ function T8codeMesh{NDIMS}(meshfile::String;
     veptr = t8_cmesh_get_tree_vertices(cmesh, itree)
     verts = unsafe_wrap(Array,veptr,(3,1 << NDIMS))
 
-    # @printf("%2d %8.2f %8.2f %8.2f\n", itree, verts[1,3],verts[2,3],verts[3,3])
-    # @printf("%2d %8.2f %8.2f %8.2f\n", itree, verts[1,4],verts[2,4],verts[3,4])
     # @printf("%2d %8.2f %8.2f %8.2f\n", itree, verts[1,1],verts[2,1],verts[3,1])
     # @printf("%2d %8.2f %8.2f %8.2f\n", itree, verts[1,2],verts[2,2],verts[3,2])
+    # @printf("%2d %8.2f %8.2f %8.2f\n", itree, verts[1,3],verts[2,3],verts[3,3])
+    # @printf("%2d %8.2f %8.2f %8.2f\n", itree, verts[1,4],verts[2,4],verts[3,4])
     # println("")
 
     # Tree vertices are stored what-not(?) order.
-    # @views data_in[:, 1, 2] .= verts[1:2,1]
-    # @views data_in[:, 2, 2] .= verts[1:2,2]
+    @views data_in[:, 1, 1] .= verts[1:2,1]
+    @views data_in[:, 2, 1] .= verts[1:2,2]
+    @views data_in[:, 1, 2] .= verts[1:2,3]
+    @views data_in[:, 2, 2] .= verts[1:2,4]
+
     # @views data_in[:, 1, 1] .= verts[1:2,3]
     # @views data_in[:, 2, 1] .= verts[1:2,4]
-
-    @views data_in[:, 1, 1] .= verts[1:2,3]
-    @views data_in[:, 2, 1] .= verts[1:2,4]
-    @views data_in[:, 1, 2] .= verts[1:2,1]
-    @views data_in[:, 2, 2] .= verts[1:2,2]
+    # @views data_in[:, 1, 2] .= verts[1:2,1]
+    # @views data_in[:, 2, 2] .= verts[1:2,2]
 
     # Interpolate corner coordinates to specified nodes.
     multiply_dimensionwise!(

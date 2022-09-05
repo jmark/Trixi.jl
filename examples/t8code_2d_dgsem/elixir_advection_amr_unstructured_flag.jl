@@ -5,13 +5,13 @@ using Trixi
 ###############################################################################
 # semidiscretization of the linear advection equation
 
-inilevel = 2
-maxlevel = 4
+inilevel = 0
+maxlevel = 0
 polydeg = 3
 trees_per_dimension = 3 .* (1, 1)
 
-# tspan = (0.0, 10.0)
-tspan = (0.0, 1.0)
+# tspan = (0.0, 0.0)
+tspan = (0.0, 0.00000001)
 # tspan = (0.0, 0.0)
 
 advection_velocity = (0.5, 0.5)
@@ -22,8 +22,9 @@ function my_initial_condition(x, t, equation::LinearScalarAdvectionEquation2D)
   # println("x = ", x)
 
   # scalar = x[1] + x[2]
-  scalar = exp(-(x[1]^2 + x[2]^2)/0.01)
+  scalar = exp(-(x[1]^2 + x[2]^2)/0.1)
   # scalar = 0.0
+  # scalar = 1.0*exp(-((x[1]-0.5)^2 + (x[2]-0.5)^2)/0.01)
   # scalar += 1.0*exp(-((x[1]-0.25)^2 + (x[2])^2)/0.01)
   # scalar += 1.0*exp(-((x[1]+0.25)^2 + (x[2])^2)/0.01)
 
@@ -40,28 +41,35 @@ initial_condition = my_initial_condition
 
 boundary_condition = BoundaryConditionDirichlet(initial_condition)
 boundary_conditions = Dict(
-  # :all => boundary_condition,
-  :x_neg => boundary_condition,
-  :x_pos => boundary_condition,
-  :y_neg => boundary_condition,
-  :y_pos => boundary_condition,
+  :all => boundary_condition,
+  # :x_neg => boundary_condition,
+  # :x_pos => boundary_condition,
+  # :y_neg => boundary_condition,
+  # :y_pos => boundary_condition,
   # Symbol("---") => boundary_condition
 )
 
 solver = DGSEM(polydeg=3, surface_flux=flux_lax_friedrichs)
 
-# Deformed rectangle that looks like a waving flag,
-f1(s) = 0.5 .* SVector(-1.0, s)
-f2(s) = 0.5 .* SVector( 1.0, s)
-f3(s) = 0.5 .* SVector(s, -1.0 + 0.1 * sin( pi * s))
-f4(s) = 0.5 .* SVector(s,  1.0 + 0.1 * sin( pi * s))
-faces = (f1, f2, f3, f4)
+if false
+  # Deformed rectangle that looks like a waving flag,
+  f1(s) = SVector(-1.0 + 0.1 * sin( pi * s), s)
+  f2(s) = SVector( 1.0 + 0.1 * sin( pi * s), s)
+  f3(s) = SVector(s, -1.0 + 0.1 * sin( pi * s))
+  f4(s) = SVector(s,  1.0 + 0.1 * sin( pi * s))
+  faces = (f1, f2, f3, f4)
 
-# This creates a mapping that transforms [-1, 1]^2 to the domain with the faces defined above.
-# It generally doesn't work for meshes loaded from mesh files because these can be meshes
-# of arbitrary domains, but the mesh below is specifically built on the domain [-1, 1]^2.
-Trixi.validate_faces(faces)
-mapping = Trixi.transfinite_mapping(faces)
+  # This creates a mapping that transforms [-1, 1]^2 to the domain with the faces defined above.
+  # It generally doesn't work for meshes loaded from mesh files because these can be meshes
+  # of arbitrary domains, but the mesh below is specifically built on the domain [-1, 1]^2.
+  Trixi.validate_faces(faces)
+  mapping = Trixi.transfinite_mapping(faces)
+else
+  coordinates_min = (-1.0, -1.0)
+  coordinates_max = ( 1.0,  1.0)
+
+  mapping = Trixi.coordinates2mapping(coordinates_min, coordinates_max)
+end
 
 # mapping_flag = nothing
 
@@ -70,23 +78,21 @@ mapping = Trixi.transfinite_mapping(faces)
 # isfile(mesh_file) || download("https://gist.githubusercontent.com/efaulhaber/63ff2ea224409e55ee8423b3a33e316a/raw/7db58af7446d1479753ae718930741c47a3b79b7/square_unstructured_2.inp", mesh_file)
 
 # mesh_file = "/home/jmark/square.msh"
+# mesh_file = "/home/jmark/square5x5"
 # mesh_file = "/home/jmark/square4x4"
-# mesh_file = "/home/jmark/square3x3"
 # mesh_file = "/home/jmark/square2x2"
 # mesh_file = "/home/jmark/square1x1"
+mesh_file = "/home/jmark/unstructured_quadrangle.msh"
+# mesh_file = "/home/jmark/square_correct_node_order.msh"
+# mesh_file = "/home/jmark/square_correct_node_order_2x2.msh"
 
 # @assert isfile(mesh_file)
 
-# mesh = T8codeMesh{2}(mesh_file, polydeg=polydeg,
-#                     mapping=mapping_flag,
-#                     initial_refinement_level=inilevel)
+mesh = T8codeMesh{2}(mesh_file, polydeg=polydeg,
+                    mapping=mapping,
+                    initial_refinement_level=inilevel)
 
-# coordinates_min = (-0.5, -0.5)
-# coordinates_max = ( 0.5,  0.5)
-# 
-# mapping = Trixi.coordinates2mapping(coordinates_min, coordinates_max)
-
-mesh = T8codeMesh(trees_per_dimension,polydeg=polydeg, initial_refinement_level=inilevel, mapping=mapping, periodicity=false)
+# mesh = T8codeMesh(trees_per_dimension,polydeg=polydeg, initial_refinement_level=inilevel, mapping=mapping, periodicity=false)
 
 semi = SemidiscretizationHyperbolic(mesh, equations, initial_condition, solver,
                                     boundary_conditions=boundary_conditions)
@@ -124,7 +130,7 @@ amr_callback = AMRCallback(semi, amr_controller,
 
 stepsize_callback = StepsizeCallback(cfl=0.8)
 
-visualization_callback = VisualizationCallback(interval=10, clims=(0,1.1), show_mesh=true)
+# visualization_callback = VisualizationCallback(interval=10, clims=(0,1.1), show_mesh=true)
 
 callbacks = CallbackSet(summary_callback,
                         # analysis_callback,
@@ -132,7 +138,7 @@ callbacks = CallbackSet(summary_callback,
                         # save_restart,
                         # save_solution,
                         amr_callback,
-                        visualization_callback,
+                        # visualization_callback,
                         stepsize_callback);
 
 ###############################################################################

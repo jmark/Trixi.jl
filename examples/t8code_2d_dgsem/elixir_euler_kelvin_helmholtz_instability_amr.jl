@@ -35,7 +35,7 @@ surface_flux = flux_lax_friedrichs
 volume_flux  = flux_ranocha
 
 polydeg = 3
-inilevel = 4
+inilevel = 2
 maxlevel = 7
 
 basis = LobattoLegendreBasis(polydeg)
@@ -54,16 +54,36 @@ solver = DGSEM(basis, surface_flux, volume_integral)
 coordinates_min = (-1.0, -1.0)
 coordinates_max = ( 1.0,  1.0)
 
-trees_per_dimension = (1, 1)
-mesh = T8codeMesh(trees_per_dimension,polydeg=polydeg, initial_refinement_level=inilevel,
-  coordinates_min=coordinates_min, coordinates_max=coordinates_max, periodicity=true)
+mapping = Trixi.coordinates2mapping(coordinates_min, coordinates_max)
+
+# Deformed rectangle that looks like a waving flag,
+# f1(s) = SVector(-1.0, s)
+# f2(s) = SVector( 1.0, s)
+# f3(s) = SVector(s, -1.0 + 0.1 * sin( pi * s))
+# f4(s) = SVector(s,  1.0 + 0.1 * sin( pi * s))
+
+f1(s) = SVector(-1.0 + 0.1 * sin( pi * s), s)
+f2(s) = SVector( 1.0 + 0.1 * sin( pi * s), s)
+f3(s) = SVector(s, -1.0 + 0.1 * sin( pi * s))
+f4(s) = SVector(s,  1.0 + 0.1 * sin( pi * s))
+
+faces = (f1, f2, f3, f4)
+
+# This creates a mapping that transforms [-1, 1]^2 to the domain with the faces defined above.
+# It generally doesn't work for meshes loaded from mesh files because these can be meshes
+# of arbitrary domains, but the mesh below is specifically built on the domain [-1, 1]^2.
+Trixi.validate_faces(faces)
+mapping = Trixi.transfinite_mapping(faces)
+
+trees_per_dimension = (2, 2)
+mesh = T8codeMesh(trees_per_dimension,polydeg=polydeg, initial_refinement_level=inilevel, mapping=mapping, periodicity=true)
 
 semi = SemidiscretizationHyperbolic(mesh, equations, initial_condition, solver)
 
 ###############################################################################
 # ODE solvers, callbacks etc.
 
-tspan = (0.0, 3.0)
+tspan = (0.0, 2.0)
 # tspan = (0.0, 1.7)
 ode = semidiscretize(semi, tspan)
 
@@ -95,10 +115,14 @@ amr_callback = AMRCallback(semi, amr_controller,
 
 stepsize_callback = StepsizeCallback(cfl=0.8)
 
+# visualization_callback = VisualizationCallback(interval=10, clims=(0,1.1), show_mesh=true)
+
 callbacks = CallbackSet(summary_callback,
                         analysis_callback, alive_callback,
                         # save_solution,
-                        amr_callback, stepsize_callback)
+                        amr_callback,
+                        # visualization_callback,
+                        stepsize_callback)
 
 ###############################################################################
 # run the simulation
