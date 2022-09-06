@@ -145,9 +145,8 @@ end
 @t8_ccall(t8_forest_get_tree_element_offset, t8_locidx_t, forest :: Cptr, ltreeid :: t8_locidx_t)
 
 @t8_ccall(t8_cmesh_new_periodic, Cptr, comm :: MPI_Comm_t, ndim :: Cint)
+
 @t8_ccall(t8_cmesh_new_periodic_hybrid, Cptr, comm :: MPI_Comm_t)
-
-
 
 @t8_ccall(t8_forest_get_num_global_trees, t8_locidx_t, forest :: Cptr)
 @t8_ccall(t8_forest_get_global_num_elements, t8_locidx_t, forest :: Cptr)
@@ -196,12 +195,6 @@ end
 
 # t8_eclass_scheme_c *t8_forest_get_eclass_scheme (t8_forest_t forest, t8_eclass_t eclass);
 @t8_ccall(t8_forest_get_eclass_scheme, Cptr, forest :: Cptr, eclass :: Cptr)
-
-# void t8_forest_element_centroid (t8_forest_t forest,
-#                                  t8_locidx_t ltreeid,
-#                                  const t8_element_t *element,
-#                                  double *coordinates);
-@t8_ccall(t8_forest_element_centroid, Cvoid, forest :: Cptr, ltreeid :: t8_locidx_t, element :: Cptr, coordinates :: Ptr{Cdouble})
 
 # t8_element_t       *t8_forest_get_element_in_tree (t8_forest_t forest,
 #                                                    t8_locidx_t ltreeid,
