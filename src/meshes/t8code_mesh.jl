@@ -165,6 +165,18 @@ function T8codeMesh(trees_per_dimension; polydeg,
     cell_x_offset = (verts[1,1] - 1/2*(trees_per_dimension[1]-1)) * dx
     cell_y_offset = (verts[2,1] - 1/2*(trees_per_dimension[2]-1)) * dy
 
+    # u = [(mapping(cell_x_offset + dx * 1/2, cell_y_offset - dy * 1/2) - mapping(cell_x_offset - dx * 1/2, cell_y_offset - dy * 1/2))...,0.0]
+    # v = [(mapping(cell_x_offset - dx * 1/2, cell_y_offset + dy * 1/2) - mapping(cell_x_offset - dx * 1/2, cell_y_offset - dy * 1/2))...,0.0]
+    # w = [0.0,0.0,1.0]
+
+    # vol = dot(cross(u,v),w)
+
+    # if vol < 0
+    #   sign = -1.0
+    # else
+    #   sign =  1.0
+    # end
+
     for j in eachindex(nodes), i in eachindex(nodes)
       tree_node_coordinates[:, i, j, itree] .= mapping(cell_x_offset + dx * nodes[i]/2,
                                                        cell_y_offset + dy * nodes[j]/2)
@@ -294,8 +306,6 @@ function T8codeMesh{NDIMS}(meshfile::String;
                                                 ntuple(_ -> length(nodes), NDIMS)...,
                                                 num_local_trees)
 
-  # println("num local trees = ", num_local_trees)
-
   nodes_in = [-1.0, 1.0]
   matrix = polynomial_interpolation_matrix(nodes_in, nodes)
   data_in = Array{RealT, 3}(undef, 2, 2, 2)
@@ -306,22 +316,21 @@ function T8codeMesh{NDIMS}(meshfile::String;
     veptr = t8_cmesh_get_tree_vertices(cmesh, itree)
     verts = unsafe_wrap(Array,veptr,(3,1 << NDIMS))
 
-    # @printf("%2d %8.2f %8.2f %8.2f\n", itree, verts[1,1],verts[2,1],verts[3,1])
-    # @printf("%2d %8.2f %8.2f %8.2f\n", itree, verts[1,2],verts[2,2],verts[3,2])
-    # @printf("%2d %8.2f %8.2f %8.2f\n", itree, verts[1,3],verts[2,3],verts[3,3])
-    # @printf("%2d %8.2f %8.2f %8.2f\n", itree, verts[1,4],verts[2,4],verts[3,4])
-    # println("")
+    u = verts[:,2] - verts[:,1]
+    v = verts[:,3] - verts[:,1]
+    w = [0.0,0.0,1.0]
+
+    vol = dot(cross(u,v),w)
+
+    if vol < 0.0
+      @warn "Discovered negative volumes in `cmesh`: vol = $vol"
+    end
 
     # Tree vertices are stored what-not(?) order.
     @views data_in[:, 1, 1] .= verts[1:2,1]
     @views data_in[:, 2, 1] .= verts[1:2,2]
     @views data_in[:, 1, 2] .= verts[1:2,3]
     @views data_in[:, 2, 2] .= verts[1:2,4]
-
-    # @views data_in[:, 1, 1] .= verts[1:2,3]
-    # @views data_in[:, 2, 1] .= verts[1:2,4]
-    # @views data_in[:, 1, 2] .= verts[1:2,1]
-    # @views data_in[:, 2, 2] .= verts[1:2,2]
 
     # Interpolate corner coordinates to specified nodes.
     multiply_dimensionwise!(
@@ -333,48 +342,7 @@ function T8codeMesh{NDIMS}(meshfile::String;
 
   end
 
-  # tmp = tree_node_coordinates[:,:,:,2]
-  # tree_node_coordinates[:,:,:,2] = tree_node_coordinates[:,:,:,1]
-  # tree_node_coordinates[:,:,:,1] = tmp 
-
-  # tmp = tree_node_coordinates[:,:,:,4]
-  # tree_node_coordinates[:,:,:,4] = tree_node_coordinates[:,:,:,3]
-  # tree_node_coordinates[:,:,:,3] = tmp 
-
   map_node_coordinates!(tree_node_coordinates, mapping)
-
-  # for itree = 1:num_local_trees
-  #   veptr = t8_cmesh_get_tree_vertices(cmesh, itree-1)
-  #   verts = unsafe_wrap(Array,veptr,(3,1 << NDIMS))
-
-  #   # verts = 2 .* orig_verts
-
-  #   dx = abs(verts[1,4] - verts[1,1])
-  #   dy = abs(verts[2,4] - verts[2,1])
-
-  #   # Calculate node coordinates of reference mesh.
-  #   # cell_x_offset = (verts[1,1] - 1/2*(trees_per_dimension[1]-1)) * dx
-  #   # cell_y_offset = (verts[2,1] - 1/2*(trees_per_dimension[2]-1)) * dy
-
-  #   cell_x = verts[1,1] + 1/2*dx
-  #   cell_y = verts[2,1] + 1/2*dy
-
-  #   @printf("%2d %8.2f %8.2f %8.2f\n", itree, verts[1,1],verts[2,1],verts[3,1])
-  #   @printf("%2d %8.2f %8.2f %8.2f\n", itree, verts[1,2],verts[2,2],verts[3,2])
-  #   @printf("%2d %8.2f %8.2f %8.2f\n", itree, verts[1,3],verts[2,3],verts[3,3])
-  #   @printf("%2d %8.2f %8.2f %8.2f\n", itree, verts[1,4],verts[2,4],verts[3,4])
-
-  #   # println(verts[:,1])
-  #   # println(verts[:,4])
-  #   println("")
-
-  #   for j in eachindex(nodes), i in eachindex(nodes)
-  #     tree_node_coordinates[:, i, j, itree] .= mapping(cell_x + dx * nodes[i]/2,
-  #                                                      cell_y + dy * nodes[j]/2)
-  #   end
-
-  #   # display(tree_node_coordinates[:, i, j, itree])
-  # end
 
   # There's no simple and generic way to distinguish boundaries. Name all of them :all.
   boundary_names = fill(:all, 2 * NDIMS, num_local_trees)

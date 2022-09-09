@@ -115,6 +115,8 @@ function calc_interface_flux!(surface_flux_values,
     primary_indices = node_indices[1, interface]
     primary_direction = indices2direction(primary_indices)
 
+    # println("primary_direction = ", primary_direction)
+
     # Create the local i,j indexing on the primary element used to pull normal direction information.
     i_primary_start, i_primary_step = index_to_start_step_2d(primary_indices[1], index_range)
     j_primary_start, j_primary_step = index_to_start_step_2d(primary_indices[2], index_range)
@@ -146,11 +148,22 @@ function calc_interface_flux!(surface_flux_values,
       normal_direction = get_normal_direction(primary_direction, contravariant_vectors,
                                               i_primary, j_primary, primary_element)
 
+      # println("normal_direction = ", round.(normal_direction,digits=3))
+      # if abs(normal_direction[1]) > 0.1
+      #   # println("normal direction = ", normal_direction)
+      #   sign_jacobian = -1.0
+      #   normal_direction *= sign_jacobian
+      # else
+      #   sign_jacobian = 1.0
+      # end
+
+      sign_jacobian = 1.0
+
       calc_interface_flux!(surface_flux_values, mesh, nonconservative_terms, equations,
                            surface_integral, dg, cache,
                            interface, normal_direction,
                            node, primary_direction, primary_element,
-                           node_secondary, secondary_direction, secondary_element)
+                           node_secondary, secondary_direction, secondary_element,sign_jacobian)
 
       # Increment primary element indices to pull the normal direction
       i_primary += i_primary_step
@@ -171,13 +184,15 @@ end
                                       surface_integral, dg::DG, cache,
                                       interface_index, normal_direction,
                                       primary_node_index, primary_direction_index, primary_element_index,
-                                      secondary_node_index, secondary_direction_index, secondary_element_index)
+                                      secondary_node_index, secondary_direction_index, secondary_element_index,sign_jacobian)
   @unpack u = cache.interfaces
   @unpack surface_flux = surface_integral
 
   u_ll, u_rr = get_surface_node_vars(u, equations, dg, primary_node_index, interface_index)
 
   flux_ = surface_flux(u_ll, u_rr, normal_direction, equations)
+
+  flux_ *= sign_jacobian
 
   for v in eachvariable(equations)
     surface_flux_values[v, primary_node_index, primary_direction_index, primary_element_index] = flux_[v]

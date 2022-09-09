@@ -453,6 +453,9 @@ function trixi_t8_count_interfaces(forest :: Cptr)
           if level < neighbor_level 
               local_num_mortars += 1
           elseif level == neighbor_level && all(Int32(current_index) .<= neighbor_ielements)
+          # elseif level == neighbor_level && 
+          #   (all(Int32(current_index) .< neighbor_ielements) || 
+          #   level == 0 && (iface == 0 || iface == 2 || iface == 4))
               local_num_conform += 1
           end
 
@@ -472,12 +475,12 @@ function trixi_t8_count_interfaces(forest :: Cptr)
     end # for
   end # for
 
-  # println("")
-  # println(" ## local_num_elements = ", num_local_elements)
-  # println(" ## local_num_conform  = ", local_num_conform)
-  # println(" ## local_num_mortars  = ", local_num_mortars)
-  # println(" ## local_num_boundry  = ", local_num_boundry)
-  # println("")
+  println("")
+  println(" ## local_num_elements = ", num_local_elements)
+  println(" ## local_num_conform  = ", local_num_conform)
+  println(" ## local_num_mortars  = ", local_num_mortars)
+  println(" ## local_num_boundry  = ", local_num_boundry)
+  println("")
 
   return (interfaces = local_num_conform,
           mortars    = local_num_mortars,
@@ -585,6 +588,9 @@ function trixi_t8_fill_interfaces(forest :: Cptr, interfaces, mortars, boundarie
 
           # Conforming interface.
           elseif level == neighbor_level && all(Int32(current_index) .<= neighbor_ielements)
+          # elseif level == neighbor_level &&
+          #   (all(Int32(current_index) .< neighbor_ielements) ||
+          #   level == 0 && (iface == 0 || iface == 2 || iface == 4))
               local_num_conform += 1
 
               faces = (iface, dual_faces[1])
@@ -595,7 +601,7 @@ function trixi_t8_fill_interfaces(forest :: Cptr, interfaces, mortars, boundarie
               interfaces.neighbor_ids[1, interface_id] = current_index + 1
               interfaces.neighbor_ids[2, interface_id] = neighbor_ielements[1] + 1
 
-              # println("neighbor_ids = ", interfaces.neighbor_ids[:,interface_id])
+              # println("neighbor_ids = ", interfaces.neighbor_ids[:,interface_id] .- 1)
               # println("faces = ", faces)
 
               # Iterate over primary and secondary element.
@@ -634,7 +640,7 @@ function trixi_t8_fill_interfaces(forest :: Cptr, interfaces, mortars, boundarie
 
           boundaries.neighbor_ids[boundary_id] = current_index + 1
 
-          # println("neighbor_id = ", boundaries.neighbor_ids[boundary_id])
+          # println("neighbor_id = ", boundaries.neighbor_ids[boundary_id] -1)
           # println("face = ", iface)
 
           if iface == 0
@@ -660,8 +666,6 @@ function trixi_t8_fill_interfaces(forest :: Cptr, interfaces, mortars, boundarie
         t8_free(pelement_indices_ref[])
 
       end # for iface = ...
-
-      # println("")
 
       current_index += 1
     end # for
