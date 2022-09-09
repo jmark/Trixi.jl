@@ -475,12 +475,12 @@ function trixi_t8_count_interfaces(forest :: Cptr)
     end # for
   end # for
 
-  println("")
-  println(" ## local_num_elements = ", num_local_elements)
-  println(" ## local_num_conform  = ", local_num_conform)
-  println(" ## local_num_mortars  = ", local_num_mortars)
-  println(" ## local_num_boundry  = ", local_num_boundry)
-  println("")
+  # println("")
+  # println(" ## local_num_elements = ", num_local_elements)
+  # println(" ## local_num_conform  = ", local_num_conform)
+  # println(" ## local_num_mortars  = ", local_num_mortars)
+  # println(" ## local_num_boundry  = ", local_num_boundry)
+  # println("")
 
   return (interfaces = local_num_conform,
           mortars    = local_num_mortars,

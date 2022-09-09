@@ -4,8 +4,8 @@ using OrdinaryDiffEq
 ###############################################################################
 # semidiscretization of the linear advection equation
 
-inilevel = 3
-maxlevel = 0
+inilevel = 2
+maxlevel = 4
 polydeg = 3
 trees_per_dimension = 1 .* (1, 1)
 
@@ -143,16 +143,16 @@ callbacks = CallbackSet(# summary_callback,
                         alive_callback,
                         # save_restart,
                         # save_solution,
-                        # amr_callback,
+                        amr_callback,
                         # visualization_callback,
-                        # stepsize_callback
+                        stepsize_callback
 );
 
 ###############################################################################
 # Run the simulation.
 
 sol = solve(ode, CarpenterKennedy2N54(williamson_condition=false),
-            dt=0.01, # Solve needs some value here but it will be overwritten by the stepsize_callback.
+            dt=1.0, # Solve needs some value here but it will be overwritten by the stepsize_callback.
             save_everystep=false, callback=callbacks);
 
 nothing;
