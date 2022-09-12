@@ -1,5 +1,6 @@
 using Trixi
 using OrdinaryDiffEq
+using Printf
 
 ###############################################################################
 # semidiscretization of the linear advection equation
@@ -79,17 +80,7 @@ mapping(x,y) = mapping_flag(mapping_flip(x,y)...)
 # mesh_file = joinpath(@__DIR__, "square_unstructured_2.inp")
 # isfile(mesh_file) || download("https://gist.githubusercontent.com/efaulhaber/63ff2ea224409e55ee8423b3a33e316a/raw/7db58af7446d1479753ae718930741c47a3b79b7/square_unstructured_2.inp", mesh_file)
 
-# mesh_file = "/home/jmark/square.msh"
-# mesh_file = "/home/jmark/square5x5"
-# mesh_file = "/home/jmark/square4x4"
-# mesh_file = "/home/jmark/square2x2.msh"
-# mesh_file = "/home/jmark/square1x1.msh"
-# mesh_file = "/home/jmark/square1x1_flipped.msh"
-mesh_file = "/home/jmark/unstructured_quadrangle.msh"
-# mesh_file = "/home/jmark/square_correct_node_order.msh"
-# mesh_file = "/home/jmark/square_correct_node_order_2x2.msh"
-
-# @assert isfile(mesh_file)
+mesh_file = joinpath(@__DIR__,"meshfiles/unstructured_quadrangle.msh")
 
 mesh = T8codeMesh{2}(mesh_file, polydeg=polydeg,
                     mapping=mapping,
@@ -136,7 +127,20 @@ amr_callback = AMRCallback(semi, amr_controller,
 
 stepsize_callback = StepsizeCallback(cfl=0.8)
 
-# visualization_callback = VisualizationCallback(interval=10, clims=(0,1.1), show_mesh=true)
+function my_save_plot(plot_data, variable_names;
+                   show_mesh=true, plot_arguments=Dict{Symbol,Any}(),
+                   time=nothing, timestep=nothing)
+
+  Plots.plot(plot_data,clim=(0,1.1),title="Advected Blob");
+  Plots.plot!(getmesh(plot_data))
+
+  # Determine filename and save plot
+  mkpath("out")
+  filename = joinpath("out", @sprintf("solution_%06d.png", timestep))
+  Plots.savefig(filename)
+end
+
+visualization_callback = VisualizationCallback(plot_creator=my_save_plot,interval=10, clims=(0,1.1), show_mesh=true)
 
 callbacks = CallbackSet(# summary_callback,
                         # analysis_callback,
@@ -144,7 +148,7 @@ callbacks = CallbackSet(# summary_callback,
                         # save_restart,
                         # save_solution,
                         amr_callback,
-                        # visualization_callback,
+                        visualization_callback,
                         stepsize_callback
 );
 
@@ -155,6 +159,4 @@ sol = solve(ode, CarpenterKennedy2N54(williamson_condition=false),
             dt=1.0, # Solve needs some value here but it will be overwritten by the stepsize_callback.
             save_everystep=false, callback=callbacks);
 
-nothing;
-
-# summary_callback()
+summary_callback()
