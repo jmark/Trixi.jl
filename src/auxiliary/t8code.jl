@@ -453,6 +453,7 @@ function trixi_t8_count_interfaces(forest :: Cptr)
           if level < neighbor_level 
               local_num_mortars += 1
           elseif level == neighbor_level && all(Int32(current_index) .<= neighbor_ielements)
+          # TODO: Find a fix for the case: Single element on root level with periodic boundaries.
           # elseif level == neighbor_level && 
           #   (all(Int32(current_index) .< neighbor_ielements) || 
           #   level == 0 && (iface == 0 || iface == 2 || iface == 4))
