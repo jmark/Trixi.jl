@@ -197,7 +197,7 @@ end
 
 
 # Coarsen elements in the DG solver based on a list of cell_ids that should be removed
-function coarsen!(u_ode::AbstractVector, adaptor, mesh::Union{TreeMesh{2}, P4estMesh{2}, T8codeMesh{2}},
+function coarsen!(u_ode::AbstractVector, adaptor, mesh::Union{TreeMesh{2}, P4estMesh{2}},
                   equations, dg::DGSEM, cache, elements_to_remove)
   # Return early if there is nothing to do
   if isempty(elements_to_remove)
@@ -216,8 +216,6 @@ function coarsen!(u_ode::AbstractVector, adaptor, mesh::Union{TreeMesh{2}, P4est
   # Retain current solution data
   old_n_elements = nelements(dg, cache)
   old_u_ode = copy(u_ode)
-
-  # println("## coarsen: old_n_elements = ", old_n_elements)
 
   GC.@preserve old_u_ode begin # OBS! If we don't GC.@preserve old_u_ode, it might be GC'ed
     old_u = wrap_array(old_u_ode, mesh, equations, dg, cache)

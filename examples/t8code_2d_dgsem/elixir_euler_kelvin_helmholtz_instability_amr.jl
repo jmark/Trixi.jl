@@ -1,4 +1,3 @@
-# using Revise
 using Plots
 using Trixi
 using Printf
@@ -89,9 +88,8 @@ else
 
   mesh_file = joinpath(@__DIR__,"meshfiles/unstructured_quadrangle.msh")
 
-  boundary_condition = BoundaryConditionDirichlet(initial_condition)
   boundary_conditions = Dict(
-    :all => boundary_condition,
+    :all => BoundaryConditionDirichlet(my_initial_condition),
   )
 
   mesh = T8codeMesh{2}(mesh_file, polydeg=polydeg,

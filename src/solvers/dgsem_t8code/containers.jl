@@ -40,31 +40,6 @@ mutable struct T8codeBoundaryContainer{NDIMS, uEltype<:Real, NDIMSP1} <: Abstrac
   _u            :: Vector{uEltype}
 end
 
-# Container data structure (structure-of-arrays style) for DG L2 mortars
-#
-# The positions used in `neighbor_ids` are 1:3 (in 2D) or 1:5 (in 3D), where 1:2 (in 2D)
-# or 1:4 (in 3D) are the small elements numbered in z-order and 3 or 5 is the large element.
-# The solution values on the mortar element are saved in `u`, where `position` is the number
-# of the small element that corresponds to the respective part of the mortar element.
-# The first dimension `small/large side` takes 1 for small side and 2 for large side.
-#
-# Illustration of the positions in `neighbor_ids` in 3D, where ξ and η are the local coordinates
-# of the mortar element, which are precisely the local coordinates that span
-# the surface of the smaller side.
-# Note that the orientation in the physical space is completely irrelevant here.
-#   ┌─────────────┬─────────────┐  ┌───────────────────────────┐
-#   │             │             │  │                           │
-#   │    small    │    small    │  │                           │
-#   │      3      │      4      │  │                           │
-#   │             │             │  │           large           │
-#   ├─────────────┼─────────────┤  │             5             │
-# η │             │             │  │                           │
-#   │    small    │    small    │  │                           │
-# ↑ │      1      │      2      │  │                           │
-# │ │             │             │  │                           │
-# │ └─────────────┴─────────────┘  └───────────────────────────┘
-# │
-# ⋅────> ξ
 mutable struct T8codeMortarContainer{NDIMS, uEltype<:Real, NDIMSP1, NDIMSP3} <: AbstractContainer
   u             :: Array{uEltype, NDIMSP3}        # [small/large side, variable, position, i, j, mortar]
   neighbor_ids  :: Matrix{Int}                    # [position, mortar]
@@ -365,11 +340,3 @@ function init_surfaces!(interfaces, mortars, boundaries, mesh::T8codeMesh)
 
   return nothing
 end
-
-include("containers_2d.jl")
-
-# Not implemented yet.
-# include("containers_3d.jl")
-# include("containers_parallel.jl")
-# include("containers_parallel_2d.jl")
-# include("containers_parallel_3d.jl")
