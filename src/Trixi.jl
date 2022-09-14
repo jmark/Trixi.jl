@@ -42,7 +42,7 @@ using LinearMaps: LinearMap
 using LoopVectorization: LoopVectorization, @turbo, indices
 using LoopVectorization.ArrayInterface: static_length
 using MPI: MPI
-using MuladdMacro: @muladd
+# using MuladdMacro: @muladd
 using GeometryBasics: GeometryBasics
 using Octavian: Octavian, matmul!
 using Polyester: @batch # You know, the cheapest threads you can find...
@@ -89,6 +89,9 @@ using StartUpDG: RefElemData, MeshData, AbstractElemShape
 #   include(expr -> quote @muladd begin $expr end end, filename)
 # end
 
+macro muladd(exp)
+  esc( exp )
+end
 
 # Define the entry points of our type hierarchy, e.g.
 #     AbstractEquations, AbstractSemidiscretization etc.
