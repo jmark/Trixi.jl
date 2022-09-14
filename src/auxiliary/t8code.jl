@@ -22,10 +22,57 @@ const SC_LP_ESSENTIAL  =   7     # /**< this logs a few lines max per program */
 const SC_LP_ERROR      =   8     # /**< this logs errors only */
 const SC_LP_SILENT     =   9     # /**< this never logs anything */
 
+# /** The maximum number of boundary faces an element class can have. */
+const T8_ECLASS_MAX_FACES = 6
+# /** The maximum number of boundary edges an element class can have. */
+const T8_ECLASS_MAX_EDGES = 12
+# /** The maximum number of boundary edges a 2D element class can have. */
+const T8_ECLASS_MAX_EDGES_2D = 4
+# /** The maximum number of cornes a 2-dimensional element class can have. */
+const T8_ECLASS_MAX_CORNERS_2D = 4
+# /** The maximum number of cornes an element class can have. */
+const T8_ECLASS_MAX_CORNERS = 8
+# /** The maximal possible dimension for an eclass */
+const T8_ECLASS_MAX_DIM = 3
+
 @enum t8_vtk_data_type_t begin
   T8_VTK_SCALAR                # /* One double value per element */
   T8_VTK_VECTOR                # /* 3 double values per element */
 end
+
+# /** This enumeration contains all possible element classes. */
+@enum t8_eclass_t begin
+  # /** The vertex is the only zero-dimensional element class. */
+  T8_ECLASS_VERTEX = 0
+  # /** The line is the only one-dimensional element class. */
+  T8_ECLASS_LINE
+  # /** The quadrilateral is one of two element classes in two dimensions. */
+  T8_ECLASS_QUAD
+  # /** The element class for a triangle. */
+  T8_ECLASS_TRIANGLE
+  # /** The hexahedron is one three-dimensional element class. */
+  T8_ECLASS_HEX
+  # /** The tetrahedron is another three-dimensional element class. */
+  T8_ECLASS_TET
+  # /** The prism has five sides: two opposing triangles joined by three quadrilaterals. */
+  T8_ECLASS_PRISM
+  # /** The pyramid has a quadrilateral as base and four triangles as sides. */
+  T8_ECLASS_PYRAMID
+  # /** This is no element class but can be used as the number of element classes. */
+  T8_ECLASS_COUNT
+  # /** This is no element class but can be used for the case a class of a third party library is not supported by t8code*/
+  T8_ECLASS_INVALID
+end
+
+t8_eclass_to_element_type = Dict(
+  Int(T8_ECLASS_LINE)       => :line,
+  Int(T8_ECLASS_QUAD)       => :quad,
+  Int(T8_ECLASS_TRIANGLE)   => :tri,
+  Int(T8_ECLASS_HEX)        => :hex,
+  Int(T8_ECLASS_TET)        => :tet,
+  Int(T8_ECLASS_PRISM)      => :prism,
+  Int(T8_ECLASS_PYRAMID)    => :pyra,
+)
 
 macro SC_ASSERT(q)
   :( $(esc(q)) ? nothing : throw(AssertionError($(string(q)))) )
@@ -149,7 +196,15 @@ end
 @t8_ccall(t8_cmesh_new_periodic_hybrid, Cptr, comm :: MPI_Comm_t)
 
 @t8_ccall(t8_forest_get_num_global_trees, t8_locidx_t, forest :: Cptr)
+
 @t8_ccall(t8_forest_get_global_num_elements, t8_locidx_t, forest :: Cptr)
+
+# /** Return a cmesh associated to a forest.
+#  * \param [in]      forest      The forest.
+#  * \return          The cmesh associated to the forest.
+#  */
+# t8_cmesh_t          t8_forest_get_cmesh (t8_forest_t forest);
+@t8_ccall(t8_forest_get_cmesh, Ptr{Cvoid}, forest :: Ptr{Cvoid})
 
 # t8_cmesh_t t8_cmesh_new_from_p4est (p4est_connectivity_t * conn, sc_MPI_Comm comm, int do_partition);
 @t8_ccall(t8_cmesh_new_from_p4est, Cptr, conn :: Cptr, comm :: MPI_Comm_t, do_partition :: Cint)
@@ -179,6 +234,28 @@ end
 #  */
 # t8_locidx_t         t8_cmesh_get_num_local_trees (t8_cmesh_t cmesh);
 @t8_ccall(t8_cmesh_get_num_local_trees, t8_locidx_t, cmesh :: Ptr{Cvoid})
+
+# /** Given a local tree id and a face number, get information about the face neighbor tree.
+#  * \param [in]      cmesh     The cmesh to be considered.
+#  * \param [in]      ltreeid   The local id of a tree or a ghost.
+#  * \param [in]      face      A face number of the tree/ghost.
+#  * \param [out]     dual_face If not NULL, the face number of the neighbor tree at this connection.
+#  * \param [out]     orientation If not NULL, the face orientation of the connection.
+#  * \return                    If non-negative: The local id of the neighbor tree or ghost.
+#  *                            If negative: There is no neighbor across this face. \a dual_face and
+#  *                            \a orientation remain unchanged.
+#  * \note If \a ltreeid is a ghost and it has a neighbor which is neither a local tree or ghost,
+#  *       then the return value will be negative.
+#  *       Thus, a negative return value does not necessarily mean that this is a domain boundary.
+#  *       To find out whether a tree is a domain boundary or not \see t8_cmesh_tree_face_is_boundary.
+#  */
+# t8_locidx_t         t8_cmesh_get_face_neighbor (const t8_cmesh_t cmesh,
+#                                                 const t8_locidx_t ltreeid,
+#                                                 const int face,
+#                                                 int *dual_face,
+#                                                 int *orientation);
+@t8_ccall(t8_cmesh_get_face_neighbor, t8_locidx_t, cmesh :: Ptr{Cvoid},
+  ltreeid :: t8_locidx_t, face :: Cint, dual_face :: Ptr{Cint}, orientation :: Ptr{Cint})
 
 # t8_locidx_t t8_forest_get_num_ghosts (t8_forest_t forest);
 @t8_ccall(t8_forest_get_num_ghosts, t8_locidx_t, forest :: Cptr)
@@ -228,6 +305,15 @@ end
 
 @t8_ccall(t8_scheme_new_default_cxx, Cptr)
 
+# /** Compute whether a given element shares a given face with its root tree.
+#  * \param [in] ts       Implementation of a class scheme.
+#  * \param [in] elem     The input element.
+#  * \param [in] face     A face of \a elem.
+#  * \return              True if \a face is a subface of the element's root element.
+#  */
+# int t8_element_is_root_boundary (t8_eclass_scheme_c *ts, const t8_element_t *elem, int face);
+@t8_ccall(t8_element_is_root_boundary, Cint, ts :: Ptr{Cvoid}, eleme :: Ptr{Cvoid}, face :: Cint)
+
 # function t8_forest_new_uniform(cmesh, scheme, level) :: Cptr
 #   # t8_forest_t         t8_forest_new_uniform (t8_cmesh_t cmesh,
 #   #                                         t8_scheme_cxx_t *scheme,
@@ -248,6 +334,44 @@ end
 
 # int t8_element_level (t8_eclass_scheme_c *ts, const t8_element_t *elem);
 @t8_ccall(t8_element_level, Cint, ts :: Cptr, elem :: Cptr)
+
+# /** Given an element and a face of this element. If the face lies on the
+#  *  tree boundary, return the face number of the tree face.
+#  *  If not the return value is arbitrary.
+#  * \param [in] ts       Implementation of a class scheme.
+#  * \param [in] elem     The element.
+#  * \param [in] face     The index of a face of \a elem.
+#  * \return The index of the tree face that \a face is a subface of, if
+#  *         \a face is on a tree boundary.
+#  *         Any arbitrary integer if \a is not at a tree boundary.
+#  */
+# int t8_element_tree_face (t8_eclass_scheme_c *ts, const t8_element_t *elem, int face);
+@t8_ccall(t8_element_tree_face, Cint, ts :: Cptr, elem :: Cptr, face :: Cint)
+
+# /** Return the shape of an allocated element according its type.
+# *  For example, a child of an element can be an element of a different shape
+# *  and has to be handled differently - according to its shape.
+# *  \param [in] ts     Implementation of a class scheme.
+# *  \param [in] elem   The element to be considered
+# *  \return            The shape of the element as an eclass
+# */
+# t8_element_shape_t  t8_element_shape (t8_eclass_scheme_c *ts,
+#                                       const t8_element_t *elem);
+@t8_ccall(t8_element_shape, Cint, ts :: Ptr{Cvoid}, elem :: Ptr{Cvoid})
+
+# /** Compute the shape of the face of an element.
+#  * \param [in] ts       Implementation of a class scheme.
+#  * \param [in] elem     The element.
+#  * \param [in] face     A face of \a elem.
+#  * \return              The element shape of the face.
+#  * I.e. T8_ECLASS_LINE for quads, T8_ECLASS_TRIANGLE for tets
+#  *      and depending on the face number either T8_ECLASS_QUAD or
+#  *      T8_ECLASS_TRIANGLE for prisms.
+#  */
+# t8_element_shape_t t8_element_face_shape (t8_eclass_scheme_c *ts,
+#                                            const t8_element_t *elem,
+#                                            int face);
+@t8_ccall(t8_element_face_shape, Cint, ts :: Ptr{Cvoid}, elem :: Ptr{Cvoid}, face :: Cint)
 
 # double              t8_forest_element_volume (t8_forest_t forest,
 #                                               t8_locidx_t ltreeid,
@@ -275,6 +399,17 @@ end
                                         corner_number :: Cint,
                                         coordinates   :: Ptr{Cdouble})
 
+# /** Given the local id of a tree in a forest, compute the tree's local id
+#  * in the associated cmesh.
+#  *  \param [in] forest    The forest.
+#  *  \param [in] ltreeid   The local id of a tree or ghost in the forest.
+#  * \return  The local id of the tree in the cmesh associated with the forest.
+#  * \a forest must be committed before calling this function.
+#  * \note For forest local trees, this is the inverse function of \ref t8_forest_cmesh_ltreeid_to_ltreeid.
+#  */
+# t8_locidx_t t8_forest_ltreeid_to_cmesh_ltreeid (t8_forest_t forest, t8_locidx_t ltreeid);
+@t8_ccall(t8_forest_ltreeid_to_cmesh_ltreeid, t8_locidx_t, forest :: Ptr{Cvoid}, ltreeid :: t8_locidx_t)
+
 # void t8_forest_element_centroid (t8_forest_t forest,
 #                                  t8_locidx_t ltreeid,
 #                                  const t8_element_t *element,
@@ -285,14 +420,14 @@ end
 #   * \param [in] elem The element.
 #   * \return          The number of corners of \a elem.
 #   */
-# int                 t8_element_num_corners (const t8_element_t *elem);
+# int t8_element_num_corners (const t8_element_t *elem);
 @t8_ccall(t8_element_num_corners, Cint, ts :: Cptr, elem :: Cptr)
 
 # /** Compute the number of faces of a given element.
 #  * \param [in] elem The element.
 #  * \return          The number of faces of \a elem.
 #  */
-# int                 t8_element_num_faces (const t8_element_t *elem);
+# int t8_element_num_faces (const t8_element_t *elem);
 @t8_ccall(t8_element_num_faces, Cint, ts :: Cptr, elem :: Cptr)
 
 # /** Compute the leaf face neighbors of a forest.
@@ -442,7 +577,6 @@ function trixi_t8_count_interfaces(forest :: Cptr)
           pelement_indices_ref, pneigh_scheme_ref, forest_is_balanced)
 
         num_neighbors      = num_neighbors_ref[]
-        # dual_faces         = unsafe_wrap(Array,dual_faces_ref[],num_neighbors)
         neighbor_ielements = unsafe_wrap(Array,pelement_indices_ref[],num_neighbors)
         neighbor_leafs     = unsafe_wrap(Array,pneighbor_leafs_ref[],num_neighbors)
         neighbor_scheme    = pneigh_scheme_ref[]
@@ -450,14 +584,14 @@ function trixi_t8_count_interfaces(forest :: Cptr)
         if num_neighbors > 0
           neighbor_level = t8_element_level(neighbor_scheme, neighbor_leafs[1])
 
-          if level < neighbor_level 
-              local_num_mortars += 1
-          elseif level == neighbor_level && all(Int32(current_index) .<= neighbor_ielements)
+          if level == neighbor_level && all(Int32(current_index) .<= neighbor_ielements)
           # TODO: Find a fix for the case: Single element on root level with periodic boundaries.
           # elseif level == neighbor_level && 
           #   (all(Int32(current_index) .< neighbor_ielements) || 
           #   level == 0 && (iface == 0 || iface == 2 || iface == 4))
               local_num_conform += 1
+          elseif level < neighbor_level 
+              local_num_mortars += 1
           end
 
         else
@@ -488,7 +622,7 @@ function trixi_t8_count_interfaces(forest :: Cptr)
           boundaries = local_num_boundry)
 end
 
-function trixi_t8_fill_interfaces(forest :: Cptr, interfaces, mortars, boundaries, boundary_names)
+function trixi_t8_fill_mesh_info(forest :: Cptr, elements, interfaces, mortars, boundaries, boundary_names)
   # /* Check that forest is a committed, that is valid and usable, forest. */
   @T8_ASSERT (t8_forest_is_committed(forest) != 0);
 
@@ -509,7 +643,7 @@ function trixi_t8_fill_interfaces(forest :: Cptr, interfaces, mortars, boundarie
     tree_class = t8_forest_get_tree_class(forest, itree);
     eclass_scheme = t8_forest_get_eclass_scheme(forest, tree_class);
 
-    # /* Get the number of elements of this tree. */
+    # Get the number of elements of this tree.
     num_elements_in_tree = t8_forest_get_tree_num_elements(forest, itree);
 
     for ielement = 0:num_elements_in_tree-1
@@ -520,6 +654,24 @@ function trixi_t8_fill_interfaces(forest :: Cptr, interfaces, mortars, boundarie
       num_faces = t8_element_num_faces(eclass_scheme,element)
 
       for iface = 0:num_faces-1
+
+        # Compute the `orientation` of the touching faces.
+        if t8_element_is_root_boundary(eclass_scheme, element, iface) == 1
+          cmesh = t8_forest_get_cmesh(forest)
+          itree_in_cmesh = t8_forest_ltreeid_to_cmesh_ltreeid(forest, itree)
+          iface_in_tree = t8_element_tree_face(eclass_scheme, element, iface)
+          orientation_ref = Ref{Cint}()
+
+          t8_cmesh_get_face_neighbor(cmesh, itree_in_cmesh, iface_in_tree, C_NULL, orientation_ref)
+          orientation = orientation_ref[]
+        else
+          orientation = 0
+        end
+
+        element_shape = t8_eclass_to_element_type[t8_element_shape(eclass_scheme, element)]
+        element_face_shape = t8_eclass_to_element_type[t8_element_face_shape(eclass_scheme, element, iface)]
+
+        elements.shapes[current_index+1] = element_shape
 
         pelement_indices_ref = Ref{Ptr{t8_locidx_t}}()
         pneighbor_leafs_ref = Ref{Ptr{Cptr}}()
@@ -543,52 +695,8 @@ function trixi_t8_fill_interfaces(forest :: Cptr, interfaces, mortars, boundarie
         if num_neighbors > 0
           neighbor_level = t8_element_level(neighbor_scheme, neighbor_leafs[1])
 
-          # Non-conforming interface.
-          if level < neighbor_level 
-              local_num_mortars += 1
-
-              # faces = (iface,dual_faces[1])
-              faces = (dual_faces[1],iface)
-
-              mortar_id = local_num_mortars
-              orientation = 0 # aligned in z-order
-
-              # Last entry is the large element ... What a stupid convention!
-              # mortars.neighbor_ids[end, mortar_id] = ielement + 1
-              mortars.neighbor_ids[end, mortar_id] = current_index + 1
-
-              # First `1:end-1` entries are the smaller elements.
-              mortars.neighbor_ids[1:end-1, mortar_id] .= neighbor_ielements[:] .+ 1
-
-              for side in 1:2
-                # Align mortar in positive coordinate direction of small side.
-                # For orientation == 1, the large side needs to be indexed backwards
-                # relative to the mortar.
-                if side == 1 || orientation == 0
-                  # Forward indexing for small side or orientation == 0
-                  indexing = :i_forward
-                else
-                  # Backward indexing for large side with reversed orientation
-                  indexing = :i_backward
-                end
-
-                if faces[side] == 0
-                  # Index face in negative x-direction
-                  mortars.node_indices[side, mortar_id] = (:begin, indexing)
-                elseif faces[side] == 1
-                  # Index face in positive x-direction
-                  mortars.node_indices[side, mortar_id] = (:end, indexing)
-                elseif faces[side] == 2
-                  # Index face in negative y-direction
-                  mortars.node_indices[side, mortar_id] = (indexing, :begin)
-                else # faces[side] == 3
-                  # Index face in positive y-direction
-                  mortars.node_indices[side, mortar_id] = (indexing, :end)
-                end
-              end
-
-          # Conforming interface.
-          elseif level == neighbor_level && all(Int32(current_index) .<= neighbor_ielements)
+          # Conforming interface: The second condition ensures we only visit the interface once.
+          if level == neighbor_level && Int32(current_index) <= neighbor_ielements[1]
           # elseif level == neighbor_level &&
           #   (all(Int32(current_index) .< neighbor_ielements) ||
           #   level == 0 && (iface == 0 || iface == 2 || iface == 4))
@@ -596,11 +704,13 @@ function trixi_t8_fill_interfaces(forest :: Cptr, interfaces, mortars, boundarie
 
               faces = (iface, dual_faces[1])
               interface_id = local_num_conform
-              orientation = 0 # aligned in z-order
 
               # Write data to interfaces container.
               interfaces.neighbor_ids[1, interface_id] = current_index + 1
               interfaces.neighbor_ids[2, interface_id] = neighbor_ielements[1] + 1
+
+              # TODO: Is this correct for 3D, too?
+              interfaces.shapes[interface_id] = element_face_shape
 
               # println("neighbor_ids = ", interfaces.neighbor_ids[:,interface_id] .- 1)
               # println("faces = ", faces)
@@ -632,6 +742,53 @@ function trixi_t8_fill_interfaces(forest :: Cptr, interfaces, mortars, boundarie
                   interfaces.node_indices[side, interface_id] = (indexing, :end)
                 end
               end
+
+          # Non-conforming interface.
+          elseif level < neighbor_level 
+              local_num_mortars += 1
+
+              faces = (dual_faces[1],iface)
+
+              mortar_id = local_num_mortars
+
+              # Last entry is the large element ... What a stupid convention!
+              # mortars.neighbor_ids[end, mortar_id] = ielement + 1
+              mortars.neighbor_ids[end, mortar_id] = current_index + 1
+
+              # First `1:end-1` entries are the smaller elements.
+              mortars.neighbor_ids[1:end-1, mortar_id] .= neighbor_ielements[:] .+ 1
+
+              # TODO: Is this correct for 3D, too?
+              mortars.shapes[:, mortar_id] .= element_face_shape
+
+              for side in 1:2
+                # Align mortar in positive coordinate direction of small side.
+                # For orientation == 1, the large side needs to be indexed backwards
+                # relative to the mortar.
+                if side == 1 || orientation == 0
+                  # Forward indexing for small side or orientation == 0
+                  indexing = :i_forward
+                else
+                  # Backward indexing for large side with reversed orientation
+                  indexing = :i_backward
+                end
+
+                if faces[side] == 0
+                  # Index face in negative x-direction
+                  mortars.node_indices[side, mortar_id] = (:begin, indexing)
+                elseif faces[side] == 1
+                  # Index face in positive x-direction
+                  mortars.node_indices[side, mortar_id] = (:end, indexing)
+                elseif faces[side] == 2
+                  # Index face in negative y-direction
+                  mortars.node_indices[side, mortar_id] = (indexing, :begin)
+                else # faces[side] == 3
+                  # Index face in positive y-direction
+                  mortars.node_indices[side, mortar_id] = (indexing, :end)
+                end
+              end
+            
+          # else: "level > neighbor_level" is skipped since we visit the mortar interface only once.
           end
 
         # Domain boundary.
@@ -645,20 +802,20 @@ function trixi_t8_fill_interfaces(forest :: Cptr, interfaces, mortars, boundarie
           # println("face = ", iface)
 
           if iface == 0
-            # Index face in negative x-direction
+            # Index face in negative x-direction.
             boundaries.node_indices[boundary_id] = (:begin, :i_forward)
           elseif iface == 1
-            # Index face in positive x-direction
+            # Index face in positive x-direction.
             boundaries.node_indices[boundary_id] = (:end, :i_forward)
           elseif iface == 2
-            # Index face in negative y-direction
+            # Index face in negative y-direction.
             boundaries.node_indices[boundary_id] = (:i_forward, :begin)
           else # iface == 3
-            # Index face in positive y-direction
+            # Index face in positive y-direction.
             boundaries.node_indices[boundary_id] = (:i_forward, :end)
           end
 
-          # One-based indexing
+          # One-based indexing.
           boundaries.name[boundary_id] = boundary_names[iface + 1, itree + 1]
         end
      

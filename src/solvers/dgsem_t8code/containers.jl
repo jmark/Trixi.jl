@@ -11,6 +11,9 @@ mutable struct T8codeElementContainer{NDIMS, RealT<:Real, uEltype<:Real, NDIMSP1
   # Buffer for calculated surface flux
   surface_flux_values       :: Array{uEltype, NDIMSP2} # [variable, i, j, direction, element]
 
+  # Shape identifier: :line, :quad, :tri, ...
+  shapes                    :: Vector{Symbol} # [element]
+
   # internal `resize!`able storage
   _node_coordinates         :: Vector{RealT}
   _jacobian_matrix          :: Vector{RealT}
@@ -24,10 +27,28 @@ mutable struct T8codeInterfaceContainer{NDIMS, uEltype<:Real, NDIMSP2} <: Abstra
   neighbor_ids  :: Matrix{Int}                   # [primary/secondary, interface]
   node_indices  :: Matrix{NTuple{NDIMS, Symbol}} # [primary/secondary, interface]
 
-  # Internal `resize!`able storage.
+  # Shape identifier: :line, :quad, :tri, ...
+  shapes        :: Vector{Symbol} # [interface]
+
+ # Internal `resize!`able storage.
   _u            :: Vector{uEltype}
   _neighbor_ids :: Vector{Int}
   _node_indices :: Vector{NTuple{NDIMS, Symbol}}
+end
+
+mutable struct T8codeMortarContainer{NDIMS, uEltype<:Real, NDIMSP1, NDIMSP3} <: AbstractContainer
+  u             :: Array{uEltype, NDIMSP3}        # [small/large side, variable, position, i, j, mortar]
+  neighbor_ids  :: Matrix{Int}                    # [position, mortar]
+  node_indices  :: Matrix{NTuple{NDIMS, Symbol}}  # [small/large, mortar]
+
+  # Shape identifier: :line, :quad, :tri, ...
+  shapes        :: Matrix{Symbol} # [small/large side, mortar]
+
+  # internal `resize!`able storage
+  _u            :: Vector{uEltype}
+  _neighbor_ids :: Vector{Int}
+  _node_indices :: Vector{NTuple{NDIMS, Symbol}}
+  _shapes       :: Vector{Symbol}
 end
 
 mutable struct T8codeBoundaryContainer{NDIMS, uEltype<:Real, NDIMSP1} <: AbstractContainer
@@ -38,17 +59,6 @@ mutable struct T8codeBoundaryContainer{NDIMS, uEltype<:Real, NDIMSP1} <: Abstrac
 
   # Internal `resize!`able storage.
   _u            :: Vector{uEltype}
-end
-
-mutable struct T8codeMortarContainer{NDIMS, uEltype<:Real, NDIMSP1, NDIMSP3} <: AbstractContainer
-  u             :: Array{uEltype, NDIMSP3}        # [small/large side, variable, position, i, j, mortar]
-  neighbor_ids  :: Matrix{Int}                    # [position, mortar]
-  node_indices  :: Matrix{NTuple{NDIMS, Symbol}}  # [small/large, mortar]
-
-  # internal `resize!`able storage
-  _u            :: Vector{uEltype}
-  _neighbor_ids :: Vector{Int}
-  _node_indices :: Vector{NTuple{NDIMS, Symbol}}
 end
 
 # ============================================================================ #
@@ -83,85 +93,24 @@ function reinitialize_containers!(mesh::T8codeMesh, equations, dg::DGSEM, cache)
   @unpack interfaces = cache
   resize!(interfaces, required.interfaces)
 
-  # Resize boundaries container.
-  @unpack boundaries = cache
-  resize!(boundaries, required.boundaries)
-
   # Resize mortars container.
   @unpack mortars = cache
   resize!(mortars, required.mortars)
 
+  # Resize boundaries container.
+  @unpack boundaries = cache
+  resize!(boundaries, required.boundaries)
+
   # Re-initialize containers together to reduce
   # the number of iterations over the mesh in `t8code`.
-  init_surfaces!(interfaces, mortars, boundaries, mesh)
+  # init_surfaces!(elements,interfaces, mortars, boundaries, mesh)
+
+  trixi_t8_fill_mesh_info(mesh.forest, elements, interfaces, mortars, boundaries, mesh.boundary_names)
+
 end
 
 # ============================================================================ #
 # ============================================================================ #
-
-# See explanation of Base.resize! for the element container.
-function Base.resize!(interfaces::T8codeInterfaceContainer, capacity)
-  @unpack _u, _neighbor_ids, _node_indices = interfaces
-
-  n_dims = ndims(interfaces)
-  n_nodes = size(interfaces.u, 3)
-  n_variables = size(interfaces.u, 2)
-
-  resize!(_u, 2 * n_variables * n_nodes^(n_dims-1) * capacity)
-  interfaces.u = unsafe_wrap(Array, pointer(_u),
-    (2, n_variables, ntuple(_ -> n_nodes, n_dims-1)..., capacity))
-
-  resize!(_neighbor_ids, 2 * capacity)
-  interfaces.neighbor_ids = unsafe_wrap(Array, pointer(_neighbor_ids), (2, capacity))
-
-  resize!(_node_indices, 2 * capacity)
-  interfaces.node_indices = unsafe_wrap(Array, pointer(_node_indices), (2, capacity))
-
-  return nothing
-end
-
-# See explanation of Base.resize! for the element container.
-function Base.resize!(boundaries::T8codeBoundaryContainer, capacity)
-  @unpack _u, neighbor_ids, node_indices, name = boundaries
-
-  n_dims = ndims(boundaries)
-  n_nodes = size(boundaries.u, 2)
-  n_variables = size(boundaries.u, 1)
-
-  resize!(_u, n_variables * n_nodes^(n_dims-1) * capacity)
-  boundaries.u = unsafe_wrap(Array, pointer(_u),
-    (n_variables, ntuple(_ -> n_nodes, n_dims-1)..., capacity))
-
-  resize!(neighbor_ids, capacity)
-
-  resize!(node_indices, capacity)
-
-  resize!(name, capacity)
-
-  return nothing
-end
-
-# See explanation of Base.resize! for the element container.
-function Base.resize!(mortars::T8codeMortarContainer, capacity)
-  @unpack _u, _neighbor_ids, _node_indices = mortars
-
-  n_dims = ndims(mortars)
-  n_nodes = size(mortars.u, 4)
-  n_variables = size(mortars.u, 2)
-
-  resize!(_u, 2 * n_variables * 2^(n_dims-1) * n_nodes^(n_dims-1) * capacity)
-  mortars.u = unsafe_wrap(Array, pointer(_u),
-    (2, n_variables, 2^(n_dims-1), ntuple(_ -> n_nodes, n_dims-1)..., capacity))
-
-  resize!(_neighbor_ids, (2^(n_dims-1) + 1) * capacity)
-  mortars.neighbor_ids = unsafe_wrap(Array, pointer(_neighbor_ids),
-    (2^(n_dims-1) + 1, capacity))
-
-  resize!(_node_indices, 2 * capacity)
-  mortars.node_indices = unsafe_wrap(Array, pointer(_node_indices), (2, capacity))
-
-  return nothing
-end
 
 # Only one-dimensional `Array`s are `resize!`able in Julia.
 # Hence, we use `Vector`s as internal storage and `resize!`
@@ -197,6 +146,79 @@ function Base.resize!(elements::T8codeElementContainer, capacity)
   elements.surface_flux_values = unsafe_wrap(Array, pointer(_surface_flux_values),
     (n_variables, ntuple(_ -> n_nodes, n_dims-1)..., n_dims*2, capacity))
 
+  resize!(elements.shapes, capacity)
+
+  return nothing
+end
+
+# See explanation of Base.resize! for the element container.
+function Base.resize!(interfaces::T8codeInterfaceContainer, capacity)
+  @unpack _u, _neighbor_ids, _node_indices = interfaces
+
+  n_dims = ndims(interfaces)
+  n_nodes = size(interfaces.u, 3)
+  n_variables = size(interfaces.u, 2)
+
+  resize!(_u, 2 * n_variables * n_nodes^(n_dims-1) * capacity)
+  interfaces.u = unsafe_wrap(Array, pointer(_u),
+    (2, n_variables, ntuple(_ -> n_nodes, n_dims-1)..., capacity))
+
+  resize!(_neighbor_ids, 2 * capacity)
+  interfaces.neighbor_ids = unsafe_wrap(Array, pointer(_neighbor_ids), (2, capacity))
+
+  resize!(_node_indices, n_dims * capacity)
+  interfaces.node_indices = unsafe_wrap(Array, pointer(_node_indices), (n_dims, capacity))
+
+  resize!(interfaces.shapes, capacity)
+
+  return nothing
+end
+
+# See explanation of Base.resize! for the element container.
+function Base.resize!(mortars::T8codeMortarContainer, capacity)
+  @unpack _u, _neighbor_ids, _node_indices, _shapes = mortars
+
+  n_dims = ndims(mortars)
+  n_nodes = size(mortars.u, 4)
+  n_variables = size(mortars.u, 2)
+
+  resize!(_u, 2 * n_variables * 2^(n_dims-1) * n_nodes^(n_dims-1) * capacity)
+  mortars.u = unsafe_wrap(Array, pointer(_u),
+    (2, n_variables, 2^(n_dims-1), ntuple(_ -> n_nodes, n_dims-1)..., capacity))
+
+  resize!(_neighbor_ids, (2^(n_dims-1) + 1) * capacity)
+  mortars.neighbor_ids = unsafe_wrap(Array, pointer(_neighbor_ids),
+    (2^(n_dims-1) + 1, capacity))
+
+  resize!(_node_indices, n_dims * capacity)
+  mortars.node_indices = unsafe_wrap(Array, pointer(_node_indices), (n_dims, capacity))
+
+  # TODO: Do we need more information here?
+  # resize!(_shapes, (2^(n_dims-1) + 1) * capacity)
+  resize!(_shapes, 2 * capacity)
+  mortars.shapes = unsafe_wrap(Array, pointer(_shapes), (2, capacity))
+
+  return nothing
+end
+
+# See explanation of Base.resize! for the element container.
+function Base.resize!(boundaries::T8codeBoundaryContainer, capacity)
+  @unpack _u, neighbor_ids, node_indices, name = boundaries
+
+  n_dims = ndims(boundaries)
+  n_nodes = size(boundaries.u, 2)
+  n_variables = size(boundaries.u, 1)
+
+  resize!(_u, n_variables * n_nodes^(n_dims-1) * capacity)
+  boundaries.u = unsafe_wrap(Array, pointer(_u),
+    (n_variables, ntuple(_ -> n_nodes, n_dims-1)..., capacity))
+
+  resize!(neighbor_ids, capacity)
+
+  resize!(node_indices, capacity)
+
+  resize!(name, capacity)
+
   return nothing
 end
 
@@ -230,9 +252,11 @@ function init_elements(mesh::T8codeMesh{NDIMS, RealT}, equations,
   surface_flux_values = unsafe_wrap(Array, pointer(_surface_flux_values),
     (nvariables(equations), ntuple(_ -> nnodes(basis), NDIMS-1)..., NDIMS*2, nelements))
 
+  shapes = Vector{Symbol}(undef, nelements)
+
   elements = T8codeElementContainer{NDIMS, RealT, uEltype, NDIMS+1, NDIMS+2, NDIMS+3}(
     node_coordinates, jacobian_matrix, contravariant_vectors,
-    inverse_jacobian, surface_flux_values,
+    inverse_jacobian, surface_flux_values, shapes,
     _node_coordinates, _jacobian_matrix, _contravariant_vectors,
     _inverse_jacobian, _surface_flux_values)
 
@@ -240,8 +264,6 @@ function init_elements(mesh::T8codeMesh{NDIMS, RealT}, equations,
   init_elements!(elements, mesh, basis)
   return elements
 end
-
-# ============================================================================ #
 
 # Create interface container and initialize interface data.
 function init_interfaces(mesh::T8codeMesh, equations, basis, elements)
@@ -257,16 +279,16 @@ function init_interfaces(mesh::T8codeMesh, equations, basis, elements)
   _neighbor_ids = Vector{Int}(undef, 2 * n_interfaces)
   neighbor_ids = unsafe_wrap(Array, pointer(_neighbor_ids), (2, n_interfaces))
 
-  _node_indices = Vector{NTuple{NDIMS, Symbol}}(undef, 2 * n_interfaces)
-  node_indices = unsafe_wrap(Array, pointer(_node_indices), (2, n_interfaces))
+  _node_indices = Vector{NTuple{NDIMS, Symbol}}(undef, NDIMS * n_interfaces)
+  node_indices = unsafe_wrap(Array, pointer(_node_indices), (NDIMS, n_interfaces))
 
-  interfaces = T8codeInterfaceContainer{NDIMS, uEltype, NDIMS+2}(u, neighbor_ids, node_indices,
+  shapes = Vector{Symbol}(undef, n_interfaces)
+
+  interfaces = T8codeInterfaceContainer{NDIMS, uEltype, NDIMS+2}(u, neighbor_ids, node_indices, shapes,
                                                                 _u, _neighbor_ids, _node_indices)
 
   return interfaces
 end
-
-# ============================================================================ #
 
 # Create mortar container and initialize mortar data.
 function init_mortars(mesh::T8codeMesh, equations, basis, elements)
@@ -283,16 +305,17 @@ function init_mortars(mesh::T8codeMesh, equations, basis, elements)
   _neighbor_ids = Vector{Int}(undef, (2^(NDIMS-1) + 1) * n_mortars)
   neighbor_ids = unsafe_wrap(Array, pointer(_neighbor_ids), (2^(NDIMS-1) + 1, n_mortars))
 
-  _node_indices = Vector{NTuple{NDIMS, Symbol}}(undef, 2 * n_mortars)
-  node_indices = unsafe_wrap(Array, pointer(_node_indices), (2, n_mortars))
+  _node_indices = Vector{NTuple{NDIMS, Symbol}}(undef, NDIMS * n_mortars)
+  node_indices = unsafe_wrap(Array, pointer(_node_indices), (NDIMS, n_mortars))
 
-  mortars = T8codeMortarContainer{NDIMS, uEltype, NDIMS+1, NDIMS+3}(u, neighbor_ids, node_indices,
-                                                                   _u, _neighbor_ids, _node_indices)
+  _shapes = Vector{NTuple{2, Symbol}}(undef, 2* n_mortars)
+  shapes = unsafe_wrap(Array, pointer(_shapes), (2, n_mortars))
+
+  mortars = T8codeMortarContainer{NDIMS, uEltype, NDIMS+1, NDIMS+3}(u, neighbor_ids, node_indices, shapes,
+                                                                   _u, _neighbor_ids, _node_indices, _shapes)
 
   return mortars
 end
-
-# ============================================================================ #
 
 # Create interface container and initialize interface data in `elements`.
 function init_boundaries(mesh::T8codeMesh, equations, basis, elements)
@@ -329,14 +352,4 @@ function count_required_surfaces(mesh::T8codeMesh)
 
   return counts
 
-end
-
-# ============================================================================ #
-# ============================================================================ #
-
-function init_surfaces!(interfaces, mortars, boundaries, mesh::T8codeMesh)
-
-  trixi_t8_fill_interfaces(mesh.forest, interfaces, mortars, boundaries, mesh.boundary_names)
-
-  return nothing
 end
