@@ -8,7 +8,7 @@ using Printf
 An unstructured curved mesh based on trees that uses the C library 't8code'
 to manage trees and mesh refinement.
 """
-mutable struct T8codeMesh{NDIMS, RealT<:Real, IsParallel, NDIMSP2, NNODES} <: AbstractMesh{NDIMS}
+mutable struct T8codeMesh{NDIMS, RealT<:Real, IsParallel, NDIMS_TREE_COORDS, NNODES} <: AbstractMesh{NDIMS}
   cmesh                 :: Ptr{Cvoid} # cpointer to coarse mesh
   scheme                :: Ptr{Cvoid} # cpointer to element scheme
   forest                :: Ptr{Cvoid} # cpointer to forest
@@ -16,13 +16,14 @@ mutable struct T8codeMesh{NDIMS, RealT<:Real, IsParallel, NDIMSP2, NNODES} <: Ab
   # ghost                 :: Ghost # Either Ptr{t8code_ghost_t} or Ptr{t8code_hex_ghost_t}
   # Coordinates at the nodes specified by the tensor product of 'nodes' (NDIMS times).
   # This specifies the geometry interpolation for each tree.
-  tree_node_coordinates :: Array{RealT, NDIMSP2} # [dimension, i, j, k, tree]
+  
+  tree_node_coordinates :: Array{RealT, NDIMS_TREE_COORDS} # [dimension, i, j, k, tree] or [i,dimension,tree]
   nodes                 :: SVector{NNODES, RealT}
+
   boundary_names        :: Array{Symbol, 2}      # [face direction, tree]
   current_filename      :: String
   unsaved_changes       :: Bool
 
-  # element_types         :: Set{Union{Line, Quad, Hex, Tri}}
   element_types         :: Set{Symbol}
 
   ncells                :: Int
@@ -50,7 +51,8 @@ mutable struct T8codeMesh{NDIMS, RealT<:Real, IsParallel, NDIMSP2, NNODES} <: Ab
 
     # ghost = ghost_new_t8code(t8code)
 
-    mesh = new{NDIMS, eltype(tree_node_coordinates), typeof(is_parallel), NDIMS+2, length(nodes)}(
+    # mesh = new{NDIMS, eltype(tree_node_coordinates), typeof(is_parallel), NDIMS+2, length(nodes)}(
+    mesh = new{NDIMS, eltype(tree_node_coordinates), typeof(is_parallel), length(size(tree_node_coordinates)), length(nodes)}(
       cmesh, scheme, forest, is_parallel, tree_node_coordinates, nodes, boundary_names, current_filename, unsaved_changes)
 
     # Destroy 't8code' structs when the mesh is garbage collected.
@@ -204,7 +206,8 @@ function T8codeMesh(trees_per_dimension; polydeg,
 
 end
 
-function T8codeMesh(cmesh; NDIMS, polydeg, mapping, RealT=Float64, initial_refinement_level=0, periodicity=true, unsaved_changes=true)
+# Hybrid mesh.
+function T8codeMesh(cmesh :: Ptr{Cvoid}; NDIMS, polydeg, mapping, RealT=Float64, initial_refinement_level=0, periodicity=true, unsaved_changes=true)
 
   # Convert periodicity to a Tuple of a Bool for every dimension
   if all(periodicity)
@@ -221,59 +224,51 @@ function T8codeMesh(cmesh; NDIMS, polydeg, mapping, RealT=Float64, initial_refin
   scheme = t8_scheme_new_default_cxx()
   forest = t8_forest_new_uniform(cmesh,scheme,initial_refinement_level,0,mpi_comm().val)
 
-  basis = LobattoLegendreBasis(RealT, polydeg)
-  nodes = basis.nodes
-
   num_local_trees = t8_cmesh_get_num_local_trees(cmesh)
 
-  println(num_local_trees)
+  # Building Gauss-Lobatto basis.
+  r1D, w1D = gauss_lobatto_quad(0, 0, polydeg)
+  rq, sq = vec.(StartUpDG.meshgrid(r1D))
+  rd = RefElemData(Quad(), N; quad_rule_vol = (rq, sq, wq), quad_rule_face = (r1D, w1D))
+  wq = @. wr * ws
+
 
   tree_node_coordinates = Array{RealT, NDIMS+2}(undef, NDIMS,
                                                 ntuple(_ -> length(nodes), NDIMS)...,
                                                 num_local_trees)
 
-  # Get cell length in reference mesh: Omega_ref = [-1,1]^2.
-  dx = 2 / trees_per_dimension[1]
-  dy = 2 / trees_per_dimension[2]
-
   # Non-periodic boundaries
-  boundary_names = fill(Symbol("---"), 2 * NDIMS, prod(trees_per_dimension))
+  # boundary_names = fill(Symbol("---"), 2 * NDIMS, prod(trees_per_dimension))
 
   for itree = 1:num_local_trees
-    veptr = t8_cmesh_get_tree_vertices(cmesh, itree-1)
-    verts = unsafe_wrap(Array,veptr,(3,1 << NDIMS))
 
-    # Calculate node coordinates of reference mesh.
-    cell_x_offset = (verts[1,1] - 1/2*(trees_per_dimension[1]-1)) * dx
-    cell_y_offset = (verts[2,1] - 1/2*(trees_per_dimension[2]-1)) * dy
+    eclass = t8_eclass_to_element_type[t8_cmesh_get_tree_class(cmesh, itree-1)]
+    nverts = t8_eclass_num_vertices[eclass]
+    tverts = unsafe_wrap(Array,t8_cmesh_get_tree_vertices(cmesh, itree-1),(3,nverts))
 
-    # u = [(mapping(cell_x_offset + dx * 1/2, cell_y_offset - dy * 1/2) - mapping(cell_x_offset - dx * 1/2, cell_y_offset - dy * 1/2))...,0.0]
-    # v = [(mapping(cell_x_offset - dx * 1/2, cell_y_offset + dy * 1/2) - mapping(cell_x_offset - dx * 1/2, cell_y_offset - dy * 1/2))...,0.0]
-    # w = [0.0,0.0,1.0]
-
-    # vol = dot(cross(u,v),w)
-
-    # if vol < 0
-    #   sign = -1.0
-    # else
-    #   sign =  1.0
-    # end
+    # println(eclass)
+    # display(tverts)
+    # println("")
+    
+    (VX,VY),EToV = uniform_mesh(Quad(),Kx,Ky)
 
     for j in eachindex(nodes), i in eachindex(nodes)
       tree_node_coordinates[:, i, j, itree] .= mapping(cell_x_offset + dx * nodes[i]/2,
                                                        cell_y_offset + dy * nodes[j]/2)
     end
 
-    if !periodicity[1]
-      boundary_names[1, itree] = :x_neg
-      boundary_names[2, itree] = :x_pos
-    end
+    # if !periodicity[1]
+    #   boundary_names[1, itree] = :x_neg
+    #   boundary_names[2, itree] = :x_pos
+    # end
 
-    if !periodicity[2]
-      boundary_names[3, itree] = :y_neg
-      boundary_names[4, itree] = :y_pos
-    end
+    # if !periodicity[2]
+    #   boundary_names[3, itree] = :y_neg
+    #   boundary_names[4, itree] = :y_pos
+    # end
   end
+
+  error("debug")
 
   return T8codeMesh{NDIMS}(cmesh, scheme,forest, tree_node_coordinates, nodes, boundary_names, "", unsaved_changes)
 

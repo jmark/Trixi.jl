@@ -74,6 +74,16 @@ t8_eclass_to_element_type = Dict(
   Int(T8_ECLASS_PYRAMID)    => :pyra,
 )
 
+t8_eclass_num_vertices = Dict(
+  :line   => 2,
+  :quad   => 4,
+  :tri    => 3,
+  :hex    => 8,
+  :tet    => 4,
+  :prism  => 6,
+  :pyra   => 5,
+)
+
 macro SC_ASSERT(q)
   :( $(esc(q)) ? nothing : throw(AssertionError($(string(q)))) )
 end
@@ -217,6 +227,17 @@ end
 
 # double *t8_cmesh_get_tree_vertices (t8_cmesh_t cmesh, t8_locidx_t ltreeid);
 @t8_ccall(t8_cmesh_get_tree_vertices, Ptr{Cdouble}, cmesh :: Ptr{Cvoid}, ltreeid :: t8_locidx_t)
+
+# /** Return the eclass of a given local tree.
+#  * TODO: Should we refer to indices or consequently use ctree_t?
+#  * \param [in]    cmesh         The cmesh to be considered.
+#  * \param [in]    tree_id       The local id of the tree whose eclass will be returned.
+#  * \return                      The eclass of the given tree.
+#  * TODO: Call tree ids ltree_id or gtree_id etc. instead of tree_id.
+#  * \a cmesh must be committed before calling this function.
+#  */
+# t8_eclass_t t8_cmesh_get_tree_class (t8_cmesh_t cmesh, t8_locidx_t ltree_id);
+@t8_ccall(t8_cmesh_get_tree_class, Cint, cmesh :: Ptr{Cvoid}, ltreeid :: t8_locidx_t)
 
 # /** Return the global number of trees in a cmesh.
 #  * \param [in] cmesh       The cmesh to be considered.

@@ -8,15 +8,21 @@ equations = LinearScalarAdvectionEquation2D((0.5,0.5))
 
 solver = DGSEM(polydeg=polydeg, surface_flux=flux_lax_friedrichs,volume_integral=VolumeIntegralWeakForm())
 
-coordinates_min = (-0.5,-0.5)
-coordinates_max = ( 0.5, 0.5)
+coordinates_min = (-1.0,-1.0)
+coordinates_max = ( 1.0, 1.0)
 
-my_mapping = Trixi.coordinates2mapping(coordinates_min, coordinates_max)
+# my_mapping = Trixi.coordinates2mapping(coordinates_min, coordinates_max)
+identity_mapping(x,y) = SVector(x,y)
 
-cmesh = Trixi.t8_cmesh_new_periodic_hybrid(Trixi.t8_mpi_comm())
+mapping = identity_mapping
 
-mesh = T8codeMesh(cmesh, NDIMS = 2, polydeg=polydeg, initial_refinement_level=inilevel,
-  mapping=my_mapping, periodicity=true)
+NDIMS = 2
+
+# cmesh = Trixi.t8_cmesh_new_periodic_hybrid(Trixi.t8_mpi_comm())
+cmesh = Trixi.t8_cmesh_new_periodic(Trixi.t8_mpi_comm(),NDIMS)
+
+mesh = T8codeMesh(cmesh, NDIMS = NDIMS, polydeg=polydeg, initial_refinement_level=inilevel,
+  mapping=mapping, periodicity=true)
 
 semi = SemidiscretizationHyperbolic(mesh, equations, initial_condition_convergence_test, solver)
 
