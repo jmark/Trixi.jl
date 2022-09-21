@@ -22,7 +22,7 @@ NDIMS = 2
 cmesh = Trixi.t8_cmesh_new_periodic(Trixi.t8_mpi_comm(),NDIMS)
 
 mesh = T8codeMesh(cmesh, NDIMS = NDIMS, polydeg=polydeg, initial_refinement_level=inilevel,
-  mapping=mapping, periodicity=true)
+  mapping=mapping)
 
 semi = SemidiscretizationHyperbolic(mesh, equations, initial_condition_convergence_test, solver)
 

@@ -3,6 +3,7 @@ using OrdinaryDiffEq
 
 polydeg = 3
 inilevel = 5
+trees_per_dimension = (1,1)
 
 equations = LinearScalarAdvectionEquation2D((0.5,0.5))
 
@@ -11,8 +12,10 @@ solver = DGSEM(polydeg=polydeg, surface_flux=flux_lax_friedrichs,volume_integral
 coordinates_min = (-0.5,-0.5)
 coordinates_max = ( 0.5, 0.5)
 
-mesh = T8codeMesh((1,1),polydeg=polydeg, initial_refinement_level=inilevel,
-  coordinates_min=coordinates_min, coordinates_max=coordinates_max, periodicity=true)
+mapping = Trixi.coordinates2mapping(coordinates_min, coordinates_max)
+
+mesh = T8codeMesh(trees_per_dimension,polydeg=polydeg, initial_refinement_level=inilevel,
+  mapping=mapping, periodicity=true)
 
 semi = SemidiscretizationHyperbolic(mesh, equations, initial_condition_convergence_test, solver)
 

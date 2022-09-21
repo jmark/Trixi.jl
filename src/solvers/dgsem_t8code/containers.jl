@@ -226,7 +226,7 @@ end
 # ============================================================================ #
 
 # Create element container and initialize element data.
-function init_elements(mesh::T8codeMesh{NDIMS, RealT}, equations,
+function init_elements(mesh::T8codeMesh{NDIMS,RealT}, equations,
                        basis, ::Type{uEltype}) where {NDIMS, RealT<:Real, uEltype<:Real}
   nelements = ncells(mesh)
 
