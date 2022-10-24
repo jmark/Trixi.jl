@@ -672,6 +672,9 @@ function trixi_t8_fill_mesh_info(forest :: Cptr, elements, interfaces, mortars, 
 
       level = t8_element_level(eclass_scheme, element)
 
+      element_shape = t8_eclass_to_element_type[t8_element_shape(eclass_scheme, element)]
+      elements.shapes[current_index+1] = element_shape
+
       num_faces = t8_element_num_faces(eclass_scheme,element)
 
       for iface = 0:num_faces-1
@@ -689,10 +692,7 @@ function trixi_t8_fill_mesh_info(forest :: Cptr, elements, interfaces, mortars, 
           orientation = 0
         end
 
-        element_shape = t8_eclass_to_element_type[t8_element_shape(eclass_scheme, element)]
         element_face_shape = t8_eclass_to_element_type[t8_element_face_shape(eclass_scheme, element, iface)]
-
-        elements.shapes[current_index+1] = element_shape
 
         pelement_indices_ref = Ref{Ptr{t8_locidx_t}}()
         pneighbor_leafs_ref = Ref{Ptr{Cptr}}()
@@ -861,6 +861,185 @@ function trixi_t8_fill_mesh_info(forest :: Cptr, elements, interfaces, mortars, 
   return (interfaces = local_num_conform,
           mortars    = local_num_mortars,
           boundaries = local_num_boundry)
+end
+
+function trixi_t8_count_faces(forest :: Cptr)
+  # /* Check that forest is a committed, that is valid and usable, forest. */
+  @T8_ASSERT (t8_forest_is_committed(forest) != 0);
+
+  # /* Get the number of local elements of forest. */
+  num_local_elements = t8_forest_get_local_num_elements(forest);
+  # /* Get the number of ghost elements of forest. */
+  num_ghost_elements = t8_forest_get_num_ghosts(forest);
+  # /* Get the number of trees that have elements of this process. */
+  num_local_trees = t8_forest_get_num_local_trees(forest);
+
+  local_num_faces = 0
+
+  for itree = 0:num_local_trees-1
+    tree_class = t8_forest_get_tree_class(forest, itree);
+    eclass_scheme = t8_forest_get_eclass_scheme(forest, tree_class);
+
+    # /* Get the number of elements of this tree. */
+    num_elements_in_tree = t8_forest_get_tree_num_elements(forest, itree);
+
+    for ielement = 0:num_elements_in_tree-1
+      element = t8_forest_get_element_in_tree(forest, itree, ielement)
+
+      # local_num_faces += t8_element_num_faces(eclass_scheme,element)
+
+      num_faces = t8_element_num_faces(eclass_scheme,element)
+
+      for iface = 0:num_faces-1
+
+        pelement_indices_ref = Ref{Ptr{t8_locidx_t}}()
+        pneighbor_leafs_ref = Ref{Ptr{Cptr}}()
+        pneigh_scheme_ref = Ref{Cptr}()
+
+        dual_faces_ref = Ref{Ptr{Cint}}()
+        num_neighbors_ref = Ref{Cint}()
+
+        forest_is_balanced = Cint(1)
+
+        t8_forest_leaf_face_neighbors(forest,itree,element,
+          pneighbor_leafs_ref, iface, dual_faces_ref, num_neighbors_ref,
+          pelement_indices_ref, pneigh_scheme_ref, forest_is_balanced)
+
+        local_num_faces += max(1,num_neighbors_ref[])
+
+        # println(max(1,num_neighbors_ref[]))
+        # println(local_num_faces)
+
+        # neighbor_ielements = unsafe_wrap(Array,pelement_indices_ref[],num_neighbors)
+        # neighbor_leafs     = unsafe_wrap(Array,pneighbor_leafs_ref[],num_neighbors)
+        # neighbor_scheme    = pneigh_scheme_ref[]
+
+        # if num_neighbors > 0
+        #   neighbor_level = t8_element_level(neighbor_scheme, neighbor_leafs[1])
+
+        #   if level == neighbor_level && all(Int32(current_index) .<= neighbor_ielements)
+        #   # TODO: Find a fix for the case: Single element on root level with periodic boundaries.
+        #   # elseif level == neighbor_level && 
+        #   #   (all(Int32(current_index) .< neighbor_ielements) || 
+        #   #   level == 0 && (iface == 0 || iface == 2 || iface == 4))
+        #       local_num_conform += 1
+        #   elseif level < neighbor_level 
+        #       local_num_mortars += 1
+        #   end
+
+        # else
+
+        #   local_num_boundry += 1
+
+        # end
+       
+        t8_free(dual_faces_ref[])
+        t8_free(pneighbor_leafs_ref[])
+        t8_free(pelement_indices_ref[])
+
+      end # for
+
+      # println(local_num_faces, " ", t8_element_num_faces(eclass_scheme,element))
+    end # for
+  end # for
+
+  return local_num_faces
+
+end
+
+function trixi_t8_fill_mesh_info!(forest :: Cptr, shapes, levels, mapP, mapM, orientation)
+  # /* Check that forest is a committed, that is valid and usable, forest. */
+  @T8_ASSERT (t8_forest_is_committed(forest) != 0);
+
+  # /* Get the number of local elements of forest. */
+  num_local_elements = t8_forest_get_local_num_elements(forest);
+  # /* Get the number of ghost elements of forest. */
+  num_ghost_elements = t8_forest_get_num_ghosts(forest);
+  # /* Get the number of trees that have elements of this process. */
+  num_local_trees = t8_forest_get_num_local_trees(forest);
+
+  elem_index = 0
+  face_index = 0
+
+  for itree = 0:num_local_trees-1
+    tree_class = t8_forest_get_tree_class(forest, itree);
+    eclass_scheme = t8_forest_get_eclass_scheme(forest, tree_class);
+
+    # Get the number of elements of this tree.
+    num_elements_in_tree = t8_forest_get_tree_num_elements(forest, itree);
+
+    for ielement = 0:num_elements_in_tree-1
+
+      elem_index += 1
+
+      element = t8_forest_get_element_in_tree(forest, itree, ielement);
+
+      level = t8_element_level(eclass_scheme, element)
+
+      levels[elem_index] = level
+      shapes[elem_index] = t8_eclass_to_element_type[t8_element_shape(eclass_scheme, element)]
+
+      num_faces = t8_element_num_faces(eclass_scheme,element)
+
+      for iface = 0:num_faces-1
+
+        # Compute the `orientation` of the touching faces.
+        if t8_element_is_root_boundary(eclass_scheme, element, iface) == 1
+          cmesh = t8_forest_get_cmesh(forest)
+          itree_in_cmesh = t8_forest_ltreeid_to_cmesh_ltreeid(forest, itree)
+          iface_in_tree = t8_element_tree_face(eclass_scheme, element, iface)
+          orientation_ref = Ref{Cint}()
+
+          t8_cmesh_get_face_neighbor(cmesh, itree_in_cmesh, iface_in_tree, C_NULL, orientation_ref)
+          orient = orientation_ref[]
+        else
+          orient = 0
+        end
+
+        # face_shapes[face_index] = t8_eclass_to_element_type[t8_element_face_shape(eclass_scheme, element, iface)]
+
+        pelement_indices_ref = Ref{Ptr{t8_locidx_t}}()
+        pneighbor_leafs_ref = Ref{Ptr{Cptr}}()
+        pneigh_scheme_ref = Ref{Cptr}()
+
+        dual_faces_ref = Ref{Ptr{Cint}}()
+        num_neighbors_ref = Ref{Cint}()
+
+        forest_is_balanced = Cint(1)
+
+        t8_forest_leaf_face_neighbors(forest,itree,element,
+          pneighbor_leafs_ref, iface, dual_faces_ref, num_neighbors_ref,
+          pelement_indices_ref, pneigh_scheme_ref, forest_is_balanced)
+
+        num_neighbors      = num_neighbors_ref[]
+        dual_faces         = unsafe_wrap(Array,dual_faces_ref[],num_neighbors)
+        neighbor_ielements = unsafe_wrap(Array,pelement_indices_ref[],num_neighbors)
+        neighbor_leafs     = unsafe_wrap(Array,pneighbor_leafs_ref[],num_neighbors)
+        neighbor_scheme    = pneigh_scheme_ref[]
+
+        # In case there is a boundary: `num_neighbors == 0`
+        if num_neighbors < 1
+          face_index += 1
+          mapP[face_index] = elem_index
+          mapM[face_index] = num_neighbors
+          orientation[face_index] = orient
+        else
+          for ineighbor = 1:num_neighbors
+            face_index += 1
+            mapP[face_index + ineighbor-1] = elem_index
+            mapM[face_index + ineighbor-1] = neighbor_ielements[ineighbor]
+            orientation[face_index] = orient
+          end
+        end
+
+        t8_free(dual_faces_ref[])
+        t8_free(pneighbor_leafs_ref[])
+        t8_free(pelement_indices_ref[])
+
+      end # for iface = ...
+    end # for
+  end # for
+
 end
 
 function trixi_t8_get_local_element_levels(forest :: Cptr)
