@@ -47,7 +47,7 @@ using GeometryBasics: GeometryBasics
 using Octavian: Octavian, matmul!
 using Polyester: @batch # You know, the cheapest threads you can find...
 using OffsetArrays: OffsetArray, OffsetVector
-using P4est
+# using P4est
 using Setfield: @set
 using RecipesBase: RecipesBase
 using Requires: @require
@@ -103,7 +103,7 @@ include("basic_types.jl")
 # Include all top-level source files
 include("auxiliary/auxiliary.jl")
 include("auxiliary/mpi.jl")
-include("auxiliary/p4est.jl")
+# include("auxiliary/p4est.jl")
 include("auxiliary/t8code.jl")
 include("equations/equations.jl")
 include("meshes/meshes.jl")
