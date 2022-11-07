@@ -26,7 +26,6 @@ function create_cache(mesh::TreeMesh{1}, equations,
 
   # Add specialized parts of the cache required to compute the volume integral etc.
   cache = (;cache..., create_cache(mesh, equations, dg.volume_integral, dg, uEltype)...)
-  cache = (;cache..., create_cache(mesh, equations, dg.mortar, uEltype)...)
 
   return cache
 end
@@ -68,11 +67,11 @@ function create_cache(mesh::Union{TreeMesh{1}, StructuredMesh{1}, P4estMesh{1}, 
 end
 
 
-# The methods below are specialized on the mortar type
-# and called from the basic `create_cache` method at the top.
-function create_cache(mesh::Union{TreeMesh{1}, StructuredMesh{1}, P4estMesh{1}, T8codeMesh{2}}, equations, mortar_l2::LobattoLegendreMortarL2, uEltype)
-  NamedTuple()
-end
+# # The methods below are specialized on the mortar type
+# # and called from the basic `create_cache` method at the top.
+# function create_cache(mesh::Union{TreeMesh{1}, StructuredMesh{1}, P4estMesh{1}, T8codeMesh{2}}, equations, mortar_l2::LobattoLegendreMortarL2, uEltype)
+#   NamedTuple()
+# end
 
 
 # TODO: Taal discuss/refactor timer, allowing users to pass a custom timer?
@@ -371,6 +370,7 @@ end
 end
 
 
+# We pass the `surface_integral` argument solely for dispatch
 function prolong2interfaces!(cache, u,
                              mesh::TreeMesh{1}, equations, surface_integral, dg::DG)
   @unpack interfaces = cache
