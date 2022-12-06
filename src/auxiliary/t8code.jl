@@ -10,6 +10,24 @@ t8_locidx_t = Int32
 t8_gloidx_t = Int64
 p4_topidx_t = Int32
 
+p4est_topidx_t = Int32
+p4est_gloidx_t = Int64
+
+p8est_topidx_t = Int32
+p8est_gloidx_t = Int64
+
+p4est_t = Ptr{Cvoid}
+p8est_t = Ptr{Cvoid}
+
+p4est_quadrant_t = Ptr{Cvoid}
+p8est_quadrant_t = Ptr{Cvoid}
+
+p4est_iter_volume_info_t = Ptr{Cvoid}
+p8est_iter_volume_info_t = Ptr{Cvoid}
+
+p4est_iter_face_info_t = Ptr{Cvoid}
+p8est_iter_face_info_t = Ptr{Cvoid}
+
 const SC_LP_DEFAULT    =  -1     # /**< this selects the SC default threshold */
 const SC_LP_ALWAYS     =   0     # /**< this will log everything */
 const SC_LP_TRACE      =   1     # /**< this will prefix file and line number */
@@ -129,7 +147,34 @@ const T8CODE_MAXLEVEL = 30
 const t8code_root_len = 1 << T8CODE_MAXLEVEL
 @inline t8code_quadrant_len(l) = 1 << (T8CODE_MAXLEVEL - l)
 
+# /** Sets the global program identifier (e.g. the MPI rank) and some flags.
+#  * This function is optional.
+#  * This function must only be called before additional threads are created.
+#  * If this function is not called or called with log_handler == NULL,
+#  * the default SC log handler will be used.
+#  * If this function is not called or called with log_threshold == SC_LP_DEFAULT,
+#  * the default SC log threshold will be used.
+#  * The default SC log settings can be changed with sc_set_log_defaults ().
+#  * \param [in] mpicomm          MPI communicator, can be sc_MPI_COMM_NULL.
+#  *                              If sc_MPI_COMM_NULL, the identifier is set to -1.
+#  *                              Otherwise, sc_MPI_Init must have been called.
+#  *                              Effectively, we just query size and rank.
+#  * \param [in] catch_signals    If true, signals INT and SEGV are caught.
+#  * \param [in] print_backtrace  If true, sc_abort prints a backtrace.
+#  */
+# void                sc_init (sc_MPI_Comm mpicomm,
+#                              int catch_signals, int print_backtrace,
+#                              sc_log_handler_t log_handler, int log_threshold);
 @t8_ccall(sc_init, Cvoid, comm :: MPI_Comm_t, catch_signals :: Cint, print_backtrace :: Cint, log_handler :: Cptr, log_threshold :: Cint)
+
+# /** Unregisters all packages, runs the memory check, removes the
+#  * signal handlers and resets sc_identifier and sc_root_*.
+#  * This function is optional.
+#  * This function does not require sc_init to be called first.
+#  */
+# void                sc_finalize (void);
+@t8_ccall(sc_finalize, Cvoid)
+
 @t8_ccall(t8_init, Cvoid, log_threshold :: Cint = SC_LP_PRODUCTION)
 
 # void p4est_init (sc_log_handler_t log_handler, int log_threshold);
@@ -205,6 +250,15 @@ end
 
 @t8_ccall(t8_cmesh_new_periodic_hybrid, Cptr, comm :: MPI_Comm_t)
 
+# /** Construct a unit square of two triangles that is periodic in x and y.
+#  * \param [in] comm         The mpi communicator to use.
+#  * \return                  A valid cmesh, as if _init and _commit had been called.
+#  */
+# t8_cmesh_t          t8_cmesh_new_periodic_tri (sc_MPI_Comm comm);
+@t8_ccall(t8_cmesh_new_periodic_tri, Cptr, comm :: MPI_Comm_t)
+
+
+
 @t8_ccall(t8_forest_get_num_global_trees, t8_locidx_t, forest :: Cptr)
 
 @t8_ccall(t8_forest_get_global_num_elements, t8_locidx_t, forest :: Cptr)
@@ -277,6 +331,30 @@ end
 #                                                 int *orientation);
 @t8_ccall(t8_cmesh_get_face_neighbor, t8_locidx_t, cmesh :: Ptr{Cvoid},
   ltreeid :: t8_locidx_t, face :: Cint, dual_face :: Ptr{Cint}, orientation :: Ptr{Cint})
+
+
+# void                t8_geometry_evaluate (t8_cmesh_t cmesh,
+#                                           t8_gloidx_t gtreeid,
+#                                           const double *ref_coords,
+#                                           double *out_coords);
+# 
+@t8_ccall(t8_geometry_evaluate, Cvoid, cmesh :: Ptr{Cvoid}, gtreeid :: t8_gloidx_t, ref_coords :: Ptr{Cdouble}, out_coords :: Ptr{Cdouble})
+
+# void                t8_geometry_jacobian (t8_cmesh_t cmesh,
+#                                           t8_gloidx_t gtreeid,
+#                                           const double *ref_coords,
+#                                           double *jacobian);
+@t8_ccall(t8_geometry_jacobian, Cvoid, cmesh :: Ptr{Cvoid}, gtreeid :: t8_gloidx_t, ref_coords :: Ptr{Cdouble}, out_coords :: Ptr{Cdouble})
+
+# /** Return the global id of a local tree or a ghost tree.
+#  * \param [in]      forest      The forest.
+#  * \param [in]      ltreeid     An id 0 <= \a ltreeid < num_local_trees + num_ghosts
+#  *                              specifying a local tree or ghost tree.
+#  * \return          The global id corresponding to the tree with local id \a ltreeid.
+#  * \a forest must be committed before calling this function.
+#  */
+# t8_gloidx_t t8_forest_global_tree_id (t8_forest_t forest, t8_locidx_t ltreeid);
+@t8_ccall(t8_forest_global_tree_id, t8_gloidx_t, forest :: Ptr{Cvoid}, ltreeid :: t8_locidx_t)
 
 # t8_locidx_t t8_forest_get_num_ghosts (t8_forest_t forest);
 @t8_ccall(t8_forest_get_num_ghosts, t8_locidx_t, forest :: Cptr)
@@ -735,6 +813,8 @@ function trixi_t8_fill_mesh_info(forest :: Cptr, elements, interfaces, mortars, 
 
               # println("neighbor_ids = ", interfaces.neighbor_ids[:,interface_id] .- 1)
               # println("faces = ", faces)
+              # println(itree+1, " ", orientation, " ", interfaces.neighbor_ids[:, interface_id], " ", faces)
+              # orientation = 0.0
 
               # Iterate over primary and secondary element.
               for side in 1:2
@@ -863,7 +943,7 @@ function trixi_t8_fill_mesh_info(forest :: Cptr, elements, interfaces, mortars, 
           boundaries = local_num_boundry)
 end
 
-function trixi_t8_count_faces(forest :: Cptr)
+function trixi_t8_count_faces(forest :: Cptr, element_types)
   # /* Check that forest is a committed, that is valid and usable, forest. */
   @T8_ASSERT (t8_forest_is_committed(forest) != 0);
 
@@ -885,6 +965,9 @@ function trixi_t8_count_faces(forest :: Cptr)
 
     for ielement = 0:num_elements_in_tree-1
       element = t8_forest_get_element_in_tree(forest, itree, ielement)
+
+      element_shape = t8_eclass_to_element_type[t8_element_shape(eclass_scheme, element)]
+      element_types[element_shape] += 1
 
       # local_num_faces += t8_element_num_faces(eclass_scheme,element)
 
