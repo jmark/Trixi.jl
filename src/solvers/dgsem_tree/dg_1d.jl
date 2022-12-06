@@ -66,14 +66,6 @@ function create_cache(mesh::Union{TreeMesh{1}, StructuredMesh{1}, P4estMesh{1}, 
   return (; fstar1_L_threaded, fstar1_R_threaded)
 end
 
-
-# # The methods below are specialized on the mortar type
-# # and called from the basic `create_cache` method at the top.
-# function create_cache(mesh::Union{TreeMesh{1}, StructuredMesh{1}, P4estMesh{1}, T8codeMesh{2}}, equations, mortar_l2::LobattoLegendreMortarL2, uEltype)
-#   NamedTuple()
-# end
-
-
 # TODO: Taal discuss/refactor timer, allowing users to pass a custom timer?
 
 function rhs!(du, u, t,
