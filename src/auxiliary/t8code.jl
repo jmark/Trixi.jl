@@ -4,11 +4,28 @@ libt8 = "$(T8DIR)/lib/libt8.so"
 # libsc = "$(T8DIR)/lib/libsc.so"
 # libp4 = "/home/jmark/install/t8code/lib/libt8.so"
 
-Cptr = Ptr{Cvoid}
-MPI_Comm_t = Cptr
-t8_locidx_t = Int32
-t8_gloidx_t = Int64
-p4_topidx_t = Int32
+const MPI_Comm_t = Ptr{Cvoid}
+const t8_locidx_t = Int32
+const t8_gloidx_t = Int64
+const p4_topidx_t = Int32
+
+const p4est_topidx_t = Int32
+const p4est_gloidx_t = Int64
+
+const p4est_t = Ptr{Cvoid}
+const p8est_t = Ptr{Cvoid}
+
+const p4est_quadrant_t = Ptr{Cvoid}
+const p8est_quadrant_t = Ptr{Cvoid}
+
+const p4est_iter_volume_info_t = Ptr{Cvoid}
+const p8est_iter_volume_info_t = Ptr{Cvoid}
+
+const p4est_iter_face_info_t = Ptr{Cvoid}
+const p8est_iter_face_info_t = Ptr{Cvoid}
+
+const p4est_iter_corner_info_t = Ptr{Cvoid}
+const p8est_iter_corner_info_t = Ptr{Cvoid}
 
 const SC_LP_DEFAULT    =  -1     # /**< this selects the SC default threshold */
 const SC_LP_ALWAYS     =   0     # /**< this will log everything */
@@ -118,7 +135,7 @@ end
 #                                           const int num_elements,
 #                                           t8_element_t *elements[]);
 macro t8_adapt_callback(callback)
-  :( @cfunction($callback, Cint, (Cptr, Cptr, t8_locidx_t, t8_locidx_t, Cptr, Cint, Cint, Ptr{Cptr})) )
+  :( @cfunction($callback, Cint, (Ptr{Cvoid}, Ptr{Cvoid}, t8_locidx_t, t8_locidx_t, Ptr{Cvoid}, Cint, Cint, Ptr{Ptr{Cvoid}})) )
 end
 
 @inline t8_mpi_comm() = mpi_comm().val
@@ -129,11 +146,20 @@ const T8CODE_MAXLEVEL = 30
 const t8code_root_len = 1 << T8CODE_MAXLEVEL
 @inline t8code_quadrant_len(l) = 1 << (T8CODE_MAXLEVEL - l)
 
-@t8_ccall(sc_init, Cvoid, comm :: MPI_Comm_t, catch_signals :: Cint, print_backtrace :: Cint, log_handler :: Cptr, log_threshold :: Cint)
+@t8_ccall(sc_init, Cvoid, comm :: MPI_Comm_t, catch_signals :: Cint, print_backtrace :: Cint, log_handler :: Ptr{Cvoid}, log_threshold :: Cint)
+
+# /** Unregisters all packages, runs the memory check, removes the
+#  * signal handlers and resets sc_identifier and sc_root_*.
+#  * This function is optional.
+#  * This function does not require sc_init to be called first.
+#  */
+# void sc_finalize (void);
+@t8_ccall(sc_finalize, Cvoid)
+
 @t8_ccall(t8_init, Cvoid, log_threshold :: Cint = SC_LP_PRODUCTION)
 
 # void p4est_init (sc_log_handler_t log_handler, int log_threshold);
-@t8_ccall(p4est_init, Cvoid, log_handler :: Cptr, log_threshold :: Cint)
+@t8_ccall(p4est_init, Cvoid, log_handler :: Ptr{Cvoid}, log_threshold :: Cint)
 
 function init_t8code()
   # loglevel = SC_LP_VERBOSE
@@ -168,46 +194,46 @@ function t8_free(ptr)
   sc_free(-1, ptr)
 end
 
-@t8_ccall(t8_forest_init, Cvoid, pforest :: Cptr)
+@t8_ccall(t8_forest_init, Cvoid, pforest :: Ptr{Cvoid})
 
 # void t8_forest_set_user_data (t8_forest_t forest, void *data);
-@t8_ccall(t8_forest_set_user_data, Cvoid, pforest :: Cptr, data :: Cptr)
+@t8_ccall(t8_forest_set_user_data, Cvoid, pforest :: Ptr{Cvoid}, data :: Ptr{Cvoid})
 
 # void *t8_forest_get_user_data (t8_forest_t forest);
-@t8_ccall(t8_forest_get_user_data, Cptr, pforest :: Cptr)
+@t8_ccall(t8_forest_get_user_data, Ptr{Cvoid}, pforest :: Ptr{Cvoid})
 
 # int t8_forest_is_committed (t8_forest_t forest);
-@t8_ccall(t8_forest_is_committed, Cint, pforest :: Cptr)
+@t8_ccall(t8_forest_is_committed, Cint, pforest :: Ptr{Cvoid})
 
 # void t8_forest_set_adapt (t8_forest_t forest,
 #                           const t8_forest_t set_from,
 #                           t8_forest_adapt_t adapt_fn,
 #                           int recursive);
-@t8_ccall(t8_forest_set_adapt, Cvoid, pforest :: Cptr, set_from :: Cptr, adapt_fn :: Cptr, recursive :: Cint)
+@t8_ccall(t8_forest_set_adapt, Cvoid, pforest :: Ptr{Cvoid}, set_from :: Ptr{Cvoid}, adapt_fn :: Ptr{Cvoid}, recursive :: Cint)
 
 # void t8_forest_set_partition (t8_forest_t forest,
 #                               const t8_forest_t set_from,
 #                               int set_for_coarsening);
-@t8_ccall(t8_forest_set_partition, Cvoid, pforest :: Cptr, set_from :: Cptr, set_for_coarsening :: Cint)
+@t8_ccall(t8_forest_set_partition, Cvoid, pforest :: Ptr{Cvoid}, set_from :: Ptr{Cvoid}, set_for_coarsening :: Cint)
 
 # void t8_forest_set_balance (t8_forest_t forest,
 #                             const t8_forest_t set_from,
 #                             int no_repartition);
-@t8_ccall(t8_forest_set_balance, Cvoid, pforest :: Cptr, set_from :: Cptr, no_repartition :: Cint)
+@t8_ccall(t8_forest_set_balance, Cvoid, pforest :: Ptr{Cvoid}, set_from :: Ptr{Cvoid}, no_repartition :: Cint)
 
 # void t8_forest_commit (t8_forest_t forest);
-@t8_ccall(t8_forest_commit, Cvoid, pforest :: Cptr)
+@t8_ccall(t8_forest_commit, Cvoid, pforest :: Ptr{Cvoid})
 
 # t8_locidx_t t8_forest_get_tree_element_offset (t8_forest_t forest, t8_locidx_t ltreeid);
-@t8_ccall(t8_forest_get_tree_element_offset, t8_locidx_t, forest :: Cptr, ltreeid :: t8_locidx_t)
+@t8_ccall(t8_forest_get_tree_element_offset, t8_locidx_t, forest :: Ptr{Cvoid}, ltreeid :: t8_locidx_t)
 
-@t8_ccall(t8_cmesh_new_periodic, Cptr, comm :: MPI_Comm_t, ndim :: Cint)
+@t8_ccall(t8_cmesh_new_periodic, Ptr{Cvoid}, comm :: MPI_Comm_t, ndim :: Cint)
 
-@t8_ccall(t8_cmesh_new_periodic_hybrid, Cptr, comm :: MPI_Comm_t)
+@t8_ccall(t8_cmesh_new_periodic_hybrid, Ptr{Cvoid}, comm :: MPI_Comm_t)
 
-@t8_ccall(t8_forest_get_num_global_trees, t8_locidx_t, forest :: Cptr)
+@t8_ccall(t8_forest_get_num_global_trees, t8_locidx_t, forest :: Ptr{Cvoid})
 
-@t8_ccall(t8_forest_get_global_num_elements, t8_locidx_t, forest :: Cptr)
+@t8_ccall(t8_forest_get_global_num_elements, t8_locidx_t, forest :: Ptr{Cvoid})
 
 # /** Return a cmesh associated to a forest.
 #  * \param [in]      forest      The forest.
@@ -217,13 +243,13 @@ end
 @t8_ccall(t8_forest_get_cmesh, Ptr{Cvoid}, forest :: Ptr{Cvoid})
 
 # t8_cmesh_t t8_cmesh_new_from_p4est (p4est_connectivity_t * conn, sc_MPI_Comm comm, int do_partition);
-@t8_ccall(t8_cmesh_new_from_p4est, Cptr, conn :: Cptr, comm :: MPI_Comm_t, do_partition :: Cint)
+@t8_ccall(t8_cmesh_new_from_p4est, Ptr{Cvoid}, conn :: Ptr{Cvoid}, comm :: MPI_Comm_t, do_partition :: Cint)
 
 # t8_cmesh_t t8_cmesh_new_from_p8est (p8est_connectivity_t * conn, sc_MPI_Comm comm, int do_partition);
-@t8_ccall(t8_cmesh_new_from_p8est, Cptr, conn :: Cptr, comm :: MPI_Comm_t, do_partition :: Cint)
+@t8_ccall(t8_cmesh_new_from_p8est, Ptr{Cvoid}, conn :: Ptr{Cvoid}, comm :: MPI_Comm_t, do_partition :: Cint)
 
 # t8_cmesh_t t8_cmesh_from_msh_file (const char *fileprefix, int partition, sc_MPI_Comm comm, int dim, int master, int use_occ_geometry);
-@t8_ccall(t8_cmesh_from_msh_file, Cptr, fileprefix :: Cstring, partition :: Cint, comm :: MPI_Comm_t, dim :: Cint, master :: Cint, use_occ_geometry :: Cint)
+@t8_ccall(t8_cmesh_from_msh_file, Ptr{Cvoid}, fileprefix :: Cstring, partition :: Cint, comm :: MPI_Comm_t, dim :: Cint, master :: Cint, use_occ_geometry :: Cint)
 
 # double *t8_cmesh_get_tree_vertices (t8_cmesh_t cmesh, t8_locidx_t ltreeid);
 @t8_ccall(t8_cmesh_get_tree_vertices, Ptr{Cdouble}, cmesh :: Ptr{Cvoid}, ltreeid :: t8_locidx_t)
@@ -279,25 +305,25 @@ end
   ltreeid :: t8_locidx_t, face :: Cint, dual_face :: Ptr{Cint}, orientation :: Ptr{Cint})
 
 # t8_locidx_t t8_forest_get_num_ghosts (t8_forest_t forest);
-@t8_ccall(t8_forest_get_num_ghosts, t8_locidx_t, forest :: Cptr)
+@t8_ccall(t8_forest_get_num_ghosts, t8_locidx_t, forest :: Ptr{Cvoid})
 
-@t8_ccall(t8_forest_get_num_local_trees, t8_locidx_t, forest :: Cptr)
+@t8_ccall(t8_forest_get_num_local_trees, t8_locidx_t, forest :: Ptr{Cvoid})
 
-@t8_ccall(t8_forest_get_local_num_elements, t8_locidx_t, forest :: Cptr)
+@t8_ccall(t8_forest_get_local_num_elements, t8_locidx_t, forest :: Ptr{Cvoid})
 
 # t8_locidx_t t8_forest_get_tree_num_elements (t8_forest_t forest, t8_locidx_t ltreeid);
-@t8_ccall(t8_forest_get_tree_num_elements , t8_locidx_t, forest :: Cptr, ltreeid :: t8_locidx_t)
+@t8_ccall(t8_forest_get_tree_num_elements , t8_locidx_t, forest :: Ptr{Cvoid}, ltreeid :: t8_locidx_t)
 
 # t8_eclass_t t8_forest_get_tree_class (t8_forest_t forest, t8_locidx_t ltreeid);
-@t8_ccall(t8_forest_get_tree_class, Cptr, forest :: Cptr, ltreeid :: t8_locidx_t)
+@t8_ccall(t8_forest_get_tree_class, Ptr{Cvoid}, forest :: Ptr{Cvoid}, ltreeid :: t8_locidx_t)
 
 # t8_eclass_scheme_c *t8_forest_get_eclass_scheme (t8_forest_t forest, t8_eclass_t eclass);
-@t8_ccall(t8_forest_get_eclass_scheme, Cptr, forest :: Cptr, eclass :: Cptr)
+@t8_ccall(t8_forest_get_eclass_scheme, Ptr{Cvoid}, forest :: Ptr{Cvoid}, eclass :: Ptr{Cvoid})
 
 # t8_element_t       *t8_forest_get_element_in_tree (t8_forest_t forest,
 #                                                    t8_locidx_t ltreeid,
 #                                                    t8_locidx_t leid_in_tree);
-@t8_ccall(t8_forest_get_element_in_tree, Cptr, forest :: Cptr, ltreeid :: t8_locidx_t, leid_in_tree :: t8_locidx_t)
+@t8_ccall(t8_forest_get_element_in_tree, Ptr{Cvoid}, forest :: Ptr{Cvoid}, ltreeid :: t8_locidx_t, leid_in_tree :: t8_locidx_t)
 
 # /** Compute the coordinates of a given element vertex inside a reference tree
 #  *  that is embedded into [0,1]^d (d = dimension).
@@ -308,23 +334,23 @@ end
 #  *                      whose entries will be filled with the coordinates of \a vertex.
 #  */
 # void t8_element_vertex_reference_coords (t8_eclass_scheme_c *ts, const t8_element_t *t, int vertex, double coords[]);
-@t8_ccall(t8_element_vertex_reference_coords, Cvoid, ts :: Cptr, element :: Cptr, vertex :: Cint, coordinates :: Ptr{Cdouble})
+@t8_ccall(t8_element_vertex_reference_coords, Cvoid, ts :: Ptr{Cvoid}, element :: Ptr{Cvoid}, vertex :: Cint, coordinates :: Ptr{Cdouble})
 
-# function t8_cmesh_new_from_p4est(conn, do_partition = 0) :: Cptr
+# function t8_cmesh_new_from_p4est(conn, do_partition = 0) :: Ptr{Cvoid}
 #   # cmesh = c"t8_cmesh_new_from_p4est"(conn, comm, do_partition)
 #   # cmesh = C_NULL
 #   # return cmesh
 #   return C_NULL
 # 
-#   return ccall(("t8_cmesh_new_from_p4est", libt8), Cptr, (Cptr, MPI_Comm_t, Cint), conn, comm, do_partition)
+#   return ccall(("t8_cmesh_new_from_p4est", libt8), Ptr{Cvoid}, (Ptr{Cvoid}, MPI_Comm_t, Cint), conn, comm, do_partition)
 # end
 
-# function t8_scheme_new_default() :: Cptr
+# function t8_scheme_new_default() :: Ptr{Cvoid}
 #   # t8_scheme_cxx_t    *t8_scheme_new_default_cxx (void);
-#   return ccall(("t8_scheme_new_default_cxx", libt8), Cptr, ())
+#   return ccall(("t8_scheme_new_default_cxx", libt8), Ptr{Cvoid}, ())
 # end
 
-@t8_ccall(t8_scheme_new_default_cxx, Cptr)
+@t8_ccall(t8_scheme_new_default_cxx, Ptr{Cvoid})
 
 # /** Compute whether a given element shares a given face with its root tree.
 #  * \param [in] ts       Implementation of a class scheme.
@@ -335,7 +361,7 @@ end
 # int t8_element_is_root_boundary (t8_eclass_scheme_c *ts, const t8_element_t *elem, int face);
 @t8_ccall(t8_element_is_root_boundary, Cint, ts :: Ptr{Cvoid}, eleme :: Ptr{Cvoid}, face :: Cint)
 
-# function t8_forest_new_uniform(cmesh, scheme, level) :: Cptr
+# function t8_forest_new_uniform(cmesh, scheme, level) :: Ptr{Cvoid}
 #   # t8_forest_t         t8_forest_new_uniform (t8_cmesh_t cmesh,
 #   #                                         t8_scheme_cxx_t *scheme,
 #   #                                         int level, int do_face_ghost,
@@ -343,18 +369,18 @@ end
 #   return C_NULL
 # 
 #   do_face_ghost = 0
-#   return ccall(("t8_forest_new_uniform", libt8), Cptr, 
-#     (Cptr, Cptr, Cint, Cint, MPI_Comm_t), cmesh, scheme, level, do_face_ghost, comm)
+#   return ccall(("t8_forest_new_uniform", libt8), Ptr{Cvoid}, 
+#     (Ptr{Cvoid}, Ptr{Cvoid}, Cint, Cint, MPI_Comm_t), cmesh, scheme, level, do_face_ghost, comm)
 # end
 
-@t8_ccall(t8_forest_new_uniform, Cptr, cmesh :: Cptr, scheme :: Cptr, level :: Cint, do_face_ghost :: Cint, comm :: MPI_Comm_t)
+@t8_ccall(t8_forest_new_uniform, Ptr{Cvoid}, cmesh :: Ptr{Cvoid}, scheme :: Ptr{Cvoid}, level :: Cint, do_face_ghost :: Cint, comm :: MPI_Comm_t)
 
 # void t8_forest_unref (t8_forest_t *pforest);
-@t8_ccall(t8_forest_unref, Cvoid, pforest :: Cptr)
+@t8_ccall(t8_forest_unref, Cvoid, pforest :: Ptr{Cvoid})
 
 
 # int t8_element_level (t8_eclass_scheme_c *ts, const t8_element_t *elem);
-@t8_ccall(t8_element_level, Cint, ts :: Cptr, elem :: Cptr)
+@t8_ccall(t8_element_level, Cint, ts :: Ptr{Cvoid}, elem :: Ptr{Cvoid})
 
 # /** Given an element and a face of this element. If the face lies on the
 #  *  tree boundary, return the face number of the tree face.
@@ -367,7 +393,7 @@ end
 #  *         Any arbitrary integer if \a is not at a tree boundary.
 #  */
 # int t8_element_tree_face (t8_eclass_scheme_c *ts, const t8_element_t *elem, int face);
-@t8_ccall(t8_element_tree_face, Cint, ts :: Cptr, elem :: Cptr, face :: Cint)
+@t8_ccall(t8_element_tree_face, Cint, ts :: Ptr{Cvoid}, elem :: Ptr{Cvoid}, face :: Cint)
 
 # /** Return the shape of an allocated element according its type.
 # *  For example, a child of an element can be an element of a different shape
@@ -397,7 +423,7 @@ end
 # double              t8_forest_element_volume (t8_forest_t forest,
 #                                               t8_locidx_t ltreeid,
 #                                               const t8_element_t *element);
-@t8_ccall(t8_forest_element_volume, Cdouble, forest :: Cptr, ltreeid :: t8_locidx_t, element :: Cptr)
+@t8_ccall(t8_forest_element_volume, Cdouble, forest :: Ptr{Cvoid}, ltreeid :: t8_locidx_t, element :: Ptr{Cvoid})
 
 # /** Compute the coordinates of a given vertex of an element if a geometry
 #  * for this tree is registered in the forest's cmesh.
@@ -414,9 +440,9 @@ end
 #                                                   int corner_number,
 #                                                   double *coordinates);
 @t8_ccall(t8_forest_element_coordinate, Cvoid, 
-                                        forest        :: Cptr,
+                                        forest        :: Ptr{Cvoid},
                                         ltreeid       :: t8_locidx_t,
-                                        element       :: Cptr,
+                                        element       :: Ptr{Cvoid},
                                         corner_number :: Cint,
                                         coordinates   :: Ptr{Cdouble})
 
@@ -435,21 +461,21 @@ end
 #                                  t8_locidx_t ltreeid,
 #                                  const t8_element_t *element,
 #                                  double *coordinates);
-@t8_ccall(t8_forest_element_centroid, Cvoid, forest :: Cptr, ltreeid :: t8_locidx_t, element :: Cptr, coordinates :: Ptr{Cdouble})
+@t8_ccall(t8_forest_element_centroid, Cvoid, forest :: Ptr{Cvoid}, ltreeid :: t8_locidx_t, element :: Ptr{Cvoid}, coordinates :: Ptr{Cdouble})
 
 # /** Compute the number of corners of a given element.
 #   * \param [in] elem The element.
 #   * \return          The number of corners of \a elem.
 #   */
 # int t8_element_num_corners (const t8_element_t *elem);
-@t8_ccall(t8_element_num_corners, Cint, ts :: Cptr, elem :: Cptr)
+@t8_ccall(t8_element_num_corners, Cint, ts :: Ptr{Cvoid}, elem :: Ptr{Cvoid})
 
 # /** Compute the number of faces of a given element.
 #  * \param [in] elem The element.
 #  * \return          The number of faces of \a elem.
 #  */
 # int t8_element_num_faces (const t8_element_t *elem);
-@t8_ccall(t8_element_num_faces, Cint, ts :: Cptr, elem :: Cptr)
+@t8_ccall(t8_element_num_faces, Cint, ts :: Ptr{Cvoid}, elem :: Ptr{Cvoid})
 
 # /** Compute the leaf face neighbors of a forest.
 #  * \param [in]    forest  The forest. Must have a valid ghost layer.
@@ -487,15 +513,15 @@ end
 #                                                    **pneigh_scheme,
 #                                                    int forest_is_balanced);
 @t8_ccall(t8_forest_leaf_face_neighbors, Cvoid,
-  forest              :: Cptr,
+  forest              :: Ptr{Cvoid},
   ltreeid             :: t8_locidx_t,
-  leaf                :: Cptr,
-  pneighbor_leafs     :: Cptr,
+  leaf                :: Ptr{Cvoid},
+  pneighbor_leafs     :: Ptr{Cvoid},
   face                :: Cint,
-  dual_faces          :: Cptr,
-  num_neighbors       :: Cptr,
-  pelement_indices    :: Cptr,
-  pneigh_scheme       :: Cptr,
+  dual_faces          :: Ptr{Cvoid},
+  num_neighbors       :: Ptr{Cvoid},
+  pelement_indices    :: Ptr{Cvoid},
+  pneigh_scheme       :: Ptr{Cvoid},
   forest_is_balanced  :: Cint)
 
 # /** Allocate a connectivity structure and populate from constants.
@@ -519,7 +545,7 @@ end
 #                                                    const p4est_topidx_t * coff,
 #                                                    const p4est_topidx_t * ctt,
 #                                                    const int8_t * ctc);
-@t8_ccall(p4est_connectivity_new_copy, Cptr,
+@t8_ccall(p4est_connectivity_new_copy, Ptr{Cvoid},
   num_vertices  :: p4est_topidx_t,
   num_trees     :: p4est_topidx_t,
   num_corners   :: p4est_topidx_t,
@@ -536,10 +562,10 @@ end
 #  * \return          Returns true if structure is valid, false otherwise.
 #  */
 # int p4est_connectivity_is_valid (p4est_connectivity_t *connectivity);
-@t8_ccall(p4est_connectivity_is_valid, Cint, connectivity :: Cptr)
+@t8_ccall(p4est_connectivity_is_valid, Cint, connectivity :: Ptr{Cvoid})
 
 # void p4est_connectivity_destroy (p4est_connectivity_t *connectivity);
-@t8_ccall(p4est_connectivity_destroy, Cvoid, connectivity :: Cptr)
+@t8_ccall(p4est_connectivity_destroy, Cvoid, connectivity :: Ptr{Cvoid})
 
 # p4est_connectivity_t *p4est_connectivity_new_brick (int mi, int ni, int periodic_a, int periodic_b);
 @t8_ccall(p4est_connectivity_new_brick, Ptr{Cvoid}, mi :: Cint, ni :: Cint, periodic_a :: Cint, periodic_b :: Cint)
@@ -547,11 +573,11 @@ end
 # p4est_connectivity_t *p4est_connectivity_read_inp (const char *filename);
 @t8_ccall(p4est_connectivity_read_inp, Ptr{Cvoid}, filename :: Cstring)
 
-function trixi_t8_unref_forest(forest :: Cptr)
+function trixi_t8_unref_forest(forest :: Ptr{Cvoid})
   t8_forest_unref(Ref(forest))
 end
 
-function trixi_t8_count_interfaces(forest :: Cptr)
+function trixi_t8_count_interfaces(forest :: Ptr{Cvoid})
   # /* Check that forest is a committed, that is valid and usable, forest. */
   @T8_ASSERT (t8_forest_is_committed(forest) != 0);
 
@@ -585,8 +611,8 @@ function trixi_t8_count_interfaces(forest :: Cptr)
       for iface = 0:num_faces-1
 
         pelement_indices_ref = Ref{Ptr{t8_locidx_t}}()
-        pneighbor_leafs_ref = Ref{Ptr{Cptr}}()
-        pneigh_scheme_ref = Ref{Cptr}()
+        pneighbor_leafs_ref = Ref{Ptr{Ptr{Cvoid}}}()
+        pneigh_scheme_ref = Ref{Ptr{Cvoid}}()
 
         dual_faces_ref = Ref{Ptr{Cint}}()
         num_neighbors_ref = Ref{Cint}()
@@ -643,7 +669,7 @@ function trixi_t8_count_interfaces(forest :: Cptr)
           boundaries = local_num_boundry)
 end
 
-function trixi_t8_fill_mesh_info(forest :: Cptr, elements, interfaces, mortars, boundaries, boundary_names)
+function trixi_t8_fill_mesh_info(forest :: Ptr{Cvoid}, elements, interfaces, mortars, boundaries, boundary_names)
   # /* Check that forest is a committed, that is valid and usable, forest. */
   @T8_ASSERT (t8_forest_is_committed(forest) != 0);
 
@@ -695,8 +721,8 @@ function trixi_t8_fill_mesh_info(forest :: Cptr, elements, interfaces, mortars, 
         element_face_shape = t8_eclass_to_element_type[t8_element_face_shape(eclass_scheme, element, iface)]
 
         pelement_indices_ref = Ref{Ptr{t8_locidx_t}}()
-        pneighbor_leafs_ref = Ref{Ptr{Cptr}}()
-        pneigh_scheme_ref = Ref{Cptr}()
+        pneighbor_leafs_ref = Ref{Ptr{Ptr{Cvoid}}}()
+        pneigh_scheme_ref = Ref{Ptr{Cvoid}}()
 
         dual_faces_ref = Ref{Ptr{Cint}}()
         num_neighbors_ref = Ref{Cint}()
@@ -863,7 +889,7 @@ function trixi_t8_fill_mesh_info(forest :: Cptr, elements, interfaces, mortars, 
           boundaries = local_num_boundry)
 end
 
-function trixi_t8_count_faces(forest :: Cptr)
+function trixi_t8_count_faces(forest :: Ptr{Cvoid})
   # /* Check that forest is a committed, that is valid and usable, forest. */
   @T8_ASSERT (t8_forest_is_committed(forest) != 0);
 
@@ -893,8 +919,8 @@ function trixi_t8_count_faces(forest :: Cptr)
       for iface = 0:num_faces-1
 
         pelement_indices_ref = Ref{Ptr{t8_locidx_t}}()
-        pneighbor_leafs_ref = Ref{Ptr{Cptr}}()
-        pneigh_scheme_ref = Ref{Cptr}()
+        pneighbor_leafs_ref = Ref{Ptr{Ptr{Cvoid}}}()
+        pneigh_scheme_ref = Ref{Ptr{Cvoid}}()
 
         dual_faces_ref = Ref{Ptr{Cint}}()
         num_neighbors_ref = Ref{Cint}()
@@ -947,7 +973,7 @@ function trixi_t8_count_faces(forest :: Cptr)
 
 end
 
-function trixi_t8_fill_mesh_info!(forest :: Cptr, shapes, levels, mapP, mapM, orientation)
+function trixi_t8_fill_mesh_info!(forest :: Ptr{Cvoid}, shapes, levels, mapP, mapM, orientation)
   # /* Check that forest is a committed, that is valid and usable, forest. */
   @T8_ASSERT (t8_forest_is_committed(forest) != 0);
 
@@ -999,8 +1025,8 @@ function trixi_t8_fill_mesh_info!(forest :: Cptr, shapes, levels, mapP, mapM, or
         # face_shapes[face_index] = t8_eclass_to_element_type[t8_element_face_shape(eclass_scheme, element, iface)]
 
         pelement_indices_ref = Ref{Ptr{t8_locidx_t}}()
-        pneighbor_leafs_ref = Ref{Ptr{Cptr}}()
-        pneigh_scheme_ref = Ref{Cptr}()
+        pneighbor_leafs_ref = Ref{Ptr{Ptr{Cvoid}}}()
+        pneigh_scheme_ref = Ref{Ptr{Cvoid}}()
 
         dual_faces_ref = Ref{Ptr{Cint}}()
         num_neighbors_ref = Ref{Cint}()
@@ -1042,7 +1068,7 @@ function trixi_t8_fill_mesh_info!(forest :: Cptr, shapes, levels, mapP, mapM, or
 
 end
 
-function trixi_t8_get_local_element_levels(forest :: Cptr)
+function trixi_t8_get_local_element_levels(forest :: Ptr{Cvoid})
   # /* Check that forest is a committed, that is valid and usable, forest. */
   @T8_ASSERT (t8_forest_is_committed(forest) != 0);
 
@@ -1095,14 +1121,14 @@ function adapt_callback(forest,
 
 end
 
-function trixi_t8_adapt_new(old_forest :: Cptr, indicators)
+function trixi_t8_adapt_new(old_forest :: Ptr{Cvoid}, indicators)
   # /* Check that forest is a committed, that is valid and usable, forest. */
   @T8_ASSERT (t8_forest_is_committed(old_forest) != 0);
 
   # Init new forest.
-  new_forest_ref = Ref{Ptr{Cptr}}()
+  new_forest_ref = Ref{Ptr{Ptr{Cvoid}}}()
   t8_forest_init(new_forest_ref);
-  new_forest :: Cptr = new_forest_ref[]
+  new_forest :: Ptr{Cvoid} = new_forest_ref[]
 
   let set_from = C_NULL, recursive = 0, set_for_coarsening = 0, no_repartition = 0
     t8_forest_set_user_data(new_forest, pointer(indicators))
