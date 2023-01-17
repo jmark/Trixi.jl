@@ -1,3 +1,4 @@
+using Plots
 using Trixi
 using OrdinaryDiffEq
 

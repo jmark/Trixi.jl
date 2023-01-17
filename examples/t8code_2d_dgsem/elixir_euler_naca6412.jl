@@ -11,7 +11,7 @@ maxlevel = 2
 polydeg = 3
 trees_per_dimension = 1 .* (1, 1)
 
-tspan = (0.0, 5.0)
+tspan = (0.0, 0.5)
 # tspan = (0.0, 2.3)
 # tspan = (0.0, 0.15)
 # tspan = (0.0, 0.0)
@@ -106,7 +106,7 @@ coordinates_max = ( 1.0,  1.0)
 # mapping = mapping_flip
 
 identity_mapping(x,y) = SVector(x,y)
-mapping = identity_mapping
+my_mapping = identity_mapping
 
 # Unstructured mesh with 24 cells of the square domain [-1, 1]^n
 # mesh_file = joinpath(@__DIR__, "square_unstructured_2.inp")
@@ -118,11 +118,11 @@ mesh_file = joinpath(@__DIR__,"meshfiles/naca6412.msh")
 # mesh_file = joinpath(@__DIR__,"meshfiles/square.msh")
 
 mesh = T8codeMesh{2}(mesh_file, polydeg=polydeg,
-                    mapping=mapping,
+                    mapping=my_mapping,
                     initial_refinement_level=inilevel)
 
-# semi = SemidiscretizationHyperbolic(mesh, equations, initial_condition, solver,
-#                                     boundary_conditions=boundary_conditions)
+semi = SemidiscretizationHyperbolic(mesh, equations, initial_condition, solver,
+                                    boundary_conditions=boundary_conditions)
 
 # mesh = T8codeMesh(
 #   trees_per_dimension,
@@ -132,78 +132,78 @@ mesh = T8codeMesh{2}(mesh_file, polydeg=polydeg,
 ###############################################################################
 # ODE solvers, callbacks etc.
 
-# ode = semidiscretize(semi, tspan)
+ode = semidiscretize(semi, tspan)
 
 # summary_callback = SummaryCallback()
-# 
-# analysis_interval = 100
+
+analysis_interval = 100
 # analysis_callback = AnalysisCallback(semi, interval=analysis_interval,
 #                                      extra_analysis_integrals=(entropy,))
 # 
-# alive_callback = AliveCallback(analysis_interval=analysis_interval)
-# 
+alive_callback = AliveCallback(analysis_interval=analysis_interval)
+
 # save_restart = SaveRestartCallback(interval=100,
 #                                    save_final_restart=true)
-# 
+
 # save_solution = SaveSolutionCallback(interval=100,
 #                                      save_initial_solution=true,
 #                                      save_final_solution=true,
 #                                      solution_variables=cons2prim)
 # 
-# # amr_indicator = IndicatorLöhner(semi, variable=Trixi.density)
-# # 
-# # amr_controller = ControllerThreeLevel(semi, amr_indicator,
-# #                                       base_level=0,
-# #                                       med_level=0, med_threshold=0.05,
-# #                                       max_level=maxlevel, max_threshold=0.1)
-# # 
-# # amr_callback = AMRCallback(semi, amr_controller,
-# #                            interval=1,
-# #                            adapt_initial_condition=true,
-# #                            adapt_initial_condition_only_refine=true)
+# amr_indicator = IndicatorLöhner(semi, variable=Trixi.density)
 # 
-# stepsize_callback = StepsizeCallback(cfl=0.8)
+# amr_controller = ControllerThreeLevel(semi, amr_indicator,
+#                                       base_level=0,
+#                                       med_level=0, med_threshold=0.05,
+#                                       max_level=maxlevel, max_threshold=0.1)
 # 
-# function my_save_plot(plot_data, variable_names;
-#                    show_mesh=true, plot_arguments=Dict{Symbol,Any}(),
-#                    time=nothing, timestep=nothing)
-# 
-#   # sol = plot_data["rho"]
-#   sol = plot_data
-# 
-#   Plots.plot(sol,
-#     clim=(0,1.1),
-#     title="Advected Blob",
-#     dpi=300,
-#   )
-# 
-#   Plots.plot!(getmesh(plot_data),linewidth=0.5)
-# 
-#   # Determine filename and save plot
-#   mkpath("out")
-#   filename = joinpath("out", @sprintf("solution_%06d.png", timestep))
-#   Plots.savefig(filename)
-# end
-# 
-# visualization_callback = VisualizationCallback(plot_creator=my_save_plot,interval=10, clims=(0,1.1), show_mesh=true)
-# 
-# callbacks = CallbackSet(# summary_callback,
-#                         # analysis_callback,
-#                         alive_callback,
-#                         # save_restart,
-#                         # save_solution,
-#                         # amr_callback,
-#                         # visualization_callback,
-#                         stepsize_callback,
-# );
+# amr_callback = AMRCallback(semi, amr_controller,
+#                            interval=1,
+#                            adapt_initial_condition=true,
+#                            adapt_initial_condition_only_refine=true)
+
+stepsize_callback = StepsizeCallback(cfl=0.8)
+
+function my_save_plot(plot_data, variable_names;
+                   show_mesh=true, plot_arguments=Dict{Symbol,Any}(),
+                   time=nothing, timestep=nothing)
+
+  # sol = plot_data["rho"]
+  sol = plot_data
+
+  Plots.plot(sol,
+    clim=(0,1.1),
+    title="Advected Blob",
+    dpi=300,
+  )
+
+  Plots.plot!(getmesh(plot_data),linewidth=0.5)
+
+  # Determine filename and save plot
+  mkpath("out")
+  filename = joinpath("out", @sprintf("solution_%06d.png", timestep))
+  Plots.savefig(filename)
+end
+
+visualization_callback = VisualizationCallback(plot_creator=my_save_plot,interval=10, clims=(0,1.1), show_mesh=true)
+
+callbacks = CallbackSet(# summary_callback,
+                        # analysis_callback,
+                        alive_callback,
+                        # save_restart,
+                        # save_solution,
+                        # amr_callback,
+                        visualization_callback,
+                        stepsize_callback,
+);
 
 ###############################################################################
 # Run the simulation.
 
-# sol = solve(ode, CarpenterKennedy2N54(williamson_condition=false),
-#             dt=1.0, # Solve needs some value here but it will be overwritten by the stepsize_callback.
-#             save_everystep=false, callback=callbacks);
-
-# summary_callback()
-#
-nothing;
+sol = solve(ode, CarpenterKennedy2N54(williamson_condition=false),
+            dt=1.0, # Solve needs some value here but it will be overwritten by the stepsize_callback.
+            save_everystep=false, callback=callbacks);
+## 
+## summary_callback()
+## #
+## nothing;

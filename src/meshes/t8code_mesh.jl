@@ -26,9 +26,6 @@ mutable struct T8codeMesh{NDIMS, RealT<:Real, IsParallel} <: AbstractMesh{NDIMS}
   current_filename      :: String
   unsaved_changes       :: Bool
 
-  element_types         :: Set{Symbol}
-  mesh_datas            :: Array{MeshData, 1}
-
   ncells                :: Int
   ninterfaces           :: Int
   nmortars              :: Int
@@ -301,7 +298,7 @@ function T8codeMesh{NDIMS}(meshfile::String;
       @warn "Discovered negative volumes in `cmesh`: vol = $vol"
     end
 
-    # Tree vertices are stored what-not(?) order.
+    # Tree vertices are stored in z-order.
     @views data_in[:, 1, 1] .= verts[1:2,1]
     @views data_in[:, 2, 1] .= verts[1:2,2]
     @views data_in[:, 1, 2] .= verts[1:2,3]
@@ -323,96 +320,6 @@ function T8codeMesh{NDIMS}(meshfile::String;
   boundary_names = fill(:all, 2 * NDIMS, num_local_trees)
 
   return T8codeMesh{NDIMS}(cmesh, scheme, forest, tree_node_coordinates, nodes, boundary_names, "", unsaved_changes)
-end
-
-"""
-    T8codeMesh(cmesh; polydeg,
-              mapping=nothing,
-              RealT=Float64, initial_refinement_level=0)
-
-Create an un-structured curved 'T8codeMesh' according to a given `cmesh`. 
-
-# Arguments
-- 'cmesh::Ptr{Cvoid}': C-pointer to a `cmesh` datastructure.
-- 'polydeg::Integer': polynomial degree used to store the geometry of the mesh.
-                      The mapping will be approximated by an interpolation polynomial
-                      of the specified degree for each tree.
-- 'mapping': a function of 'NDIMS' variables to describe the mapping that transforms
-             the reference mesh ('[-1, 1]^n') to the physical domain.
-- 'RealT::Type': the type that should be used for coordinates.
-- 'initial_refinement_level::Integer': refine the mesh uniformly to this level before the simulation starts.
-"""
-
-function T8codeMesh(cmesh :: Ptr{Cvoid}; NDIMS, polydeg, mapping, RealT=Float64, initial_refinement_level=0)
-
-  scheme = t8_scheme_new_default_cxx()
-  forest = t8_forest_new_uniform(cmesh,scheme,initial_refinement_level,0,mpi_comm().val)
-
-  num_local_trees = t8_cmesh_get_num_local_trees(cmesh)
-
-  # Building Gauss-Lobatto basis for a quadrangle.
-  r1D, w1D = StartUpDG.gauss_lobatto_quad(0, 0, polydeg)
-  rq, sq = vec.(StartUpDG.meshgrid(r1D))
-  wr, ws = vec.(StartUpDG.meshgrid(w1D))
-  wq = @. wr * ws
-  rd = RefElemData(Quad(), polydeg; quad_rule_vol = (rq, sq, wq), quad_rule_face = (r1D, w1D))
-    
-  # tree_node_coordinates = Array{RealT, NDIMS+2}(undef, NDIMS,
-  #                                               ntuple(_ -> length(nodes), NDIMS)...,
-  #                                               num_local_trees)
-
-  # Non-periodic boundaries
-  # boundary_names = fill(Symbol("---"), 2 * NDIMS, prod(trees_per_dimension))
-
-  for itree = 1:num_local_trees
-
-    eclass = t8_eclass_to_element_type[t8_cmesh_get_tree_class(cmesh, itree-1)]
-    nverts = t8_eclass_num_vertices[eclass]
-    tverts = unsafe_wrap(Array,t8_cmesh_get_tree_vertices(cmesh, itree-1),(3,nverts))
-
-    # println(eclass)
-    # display(tverts)
-    # println("")
-    
-    mapping = coordinates2mapping((tverts[1,1],tverts[2,1]),(tverts[1,4],tverts[2,4]))
-
-    (VX,VY),EToV = StartUpDG.uniform_mesh(Quad(),1,1)
-    md = MeshData((VX, VY), EToV, rd)
-
-    @unpack x,y = md
-    for i in eachindex(x)
-      x[i],y[i] = mapping(x[i],y[i])
-    end
-
-    md = MeshData(rd, md, x, y)
-
-    # println(x)
-    # println(y)
-    # println("")
-
-    # for j in eachindex(nodes), i in eachindex(nodes)
-    #   tree_node_coordinates[:, i, j, itree] .= mapping(cell_x_offset + dx * nodes[i]/2,
-    #                                                    cell_y_offset + dy * nodes[j]/2)
-    # end
-
-    # if !periodicity[1]
-    #   boundary_names[1, itree] = :x_neg
-    #   boundary_names[2, itree] = :x_pos
-    # end
-
-    # if !periodicity[2]
-    #   boundary_names[3, itree] = :y_neg
-    #   boundary_names[4, itree] = :y_pos
-    # end
-  end
-
-  error("debug")
-
-  # There's no simple and generic way to distinguish boundaries. Name all of them :all.
-  boundary_names = fill(:all, 2 * NDIMS, num_local_trees)
-
-  return T8codeMesh{NDIMS}(cmesh, scheme, forest, tree_node_coordinates, nodes, boundary_names, "", unsaved_changes)
-
 end
 
 function split_filename(filename)
