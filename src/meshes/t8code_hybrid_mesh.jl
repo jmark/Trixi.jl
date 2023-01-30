@@ -176,6 +176,9 @@ function T8codeHybridMesh(cmesh :: Ptr{Cvoid}; NDIMS, polydeg, mapping, RealT=Fl
 
   # There's no simple and generic way to distinguish boundaries. Name all of them :all.
   boundary_names = fill(:all, 2 * NDIMS, num_local_trees)
+  element_types = fill(:all, 2 * NDIMS, num_local_trees)
+
+  println(forest)
 
   nfaces = trixi_t8_count_faces(forest)
 
@@ -195,7 +198,7 @@ function T8codeHybridMesh(cmesh :: Ptr{Cvoid}; NDIMS, polydeg, mapping, RealT=Fl
   println(mapM)
   println(orientation)
 
-  # trixi_t8_fill_mesh_info(mesh.forest, elements, interfaces, mortars, boundaries, mesh.boundary_names)
+  println(shapes)
 
   return T8codeHybridMesh{NDIMS}(cmesh, scheme, forest, boundary_names)
 

@@ -940,7 +940,7 @@ function trixi_t8_fill_mesh_info(forest :: Ptr{Cvoid}, elements, interfaces, mor
           boundaries = local_num_boundry)
 end
 
-function trixi_t8_count_faces(forest :: Ptr{Cvoid}, element_types)
+function trixi_t8_count_faces(forest :: Ptr{Cvoid})
   # /* Check that forest is a committed, that is valid and usable, forest. */
   @T8_ASSERT (t8_forest_is_committed(forest) != 0);
 
@@ -963,8 +963,8 @@ function trixi_t8_count_faces(forest :: Ptr{Cvoid}, element_types)
     for ielement = 0:num_elements_in_tree-1
       element = t8_forest_get_element_in_tree(forest, itree, ielement)
 
-      element_shape = t8_eclass_to_element_type[t8_element_shape(eclass_scheme, element)]
-      element_types[element_shape] += 1
+      # element_shape = t8_eclass_to_element_type[t8_element_shape(eclass_scheme, element)]
+      # element_types[element_shape] += 1
 
       # local_num_faces += t8_element_num_faces(eclass_scheme,element)
 

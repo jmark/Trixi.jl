@@ -47,9 +47,11 @@ indicator_sc = IndicatorHennemannGassner(equations, basis,
                                          alpha_smooth=true,
                                          variable=Trixi.density)
 
-volume_integral = VolumeIntegralShockCapturingHG(indicator_sc;
-                                                 volume_flux_dg=volume_flux,
-                                                 volume_flux_fv=surface_flux)
+# volume_integral = VolumeIntegralShockCapturingHG(indicator_sc;
+#                                                  volume_flux_dg=volume_flux,
+#                                                  volume_flux_fv=surface_flux)
+
+volume_integral = VolumeIntegralWeakForm()
 
 solver = DGSEM(basis, surface_flux, volume_integral)
 
@@ -104,7 +106,7 @@ end
 ###############################################################################
 # ODE solvers, callbacks etc.
 
-tspan = (0.0, 1.0)
+tspan = (0.0, 0.1)
 ode = semidiscretize(semi, tspan)
 
 summary_callback = SummaryCallback()

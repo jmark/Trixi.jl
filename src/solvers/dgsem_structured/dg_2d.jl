@@ -45,7 +45,6 @@ end
 
 
 @inline function weak_form_kernel!(du, u,
-<<<<<<< HEAD
                                    element, mesh::Union{StructuredMesh{2}, UnstructuredMesh2D, P4estMesh{2}, T8codeMesh{2}},
                                    nonconservative_terms::False, equations,
                                    dg::DGSEM, cache, alpha=true)
@@ -80,18 +79,10 @@ end
   return nothing
 end
 
-
-<<<<<<< HEAD
 @inline function split_form_kernel!(du, u,
                                     element, mesh::Union{StructuredMesh{2}, UnstructuredMesh2D, P4estMesh{2}, T8codeMesh{2}},
-                                    nonconservative_terms::Val{false}, equations,
+                                    nonconservative_terms::False, equations,
                                     volume_flux, dg::DGSEM, cache, alpha=true)
-=======
-@inline function flux_differencing_kernel!(du, u,
-                                           element, mesh::Union{StructuredMesh{2}, UnstructuredMesh2D, P4estMesh{2}},
-                                           nonconservative_terms::False, equations,
-                                           volume_flux, dg::DGSEM, cache, alpha=true)
->>>>>>> main
   @unpack derivative_split = dg.basis
   @unpack contravariant_vectors = cache.elements
 
@@ -197,13 +188,8 @@ end
 # "A provably entropy stable subcell shock capturing approach for high order split form DG for the compressible Euler equations"
 # [arXiv: 2008.12044v2](https://arxiv.org/pdf/2008.12044)
 @inline function calcflux_fv!(fstar1_L, fstar1_R, fstar2_L, fstar2_R, u,
-<<<<<<< HEAD
                               mesh::Union{StructuredMesh{2}, UnstructuredMesh2D, P4estMesh{2}, T8codeMesh{2}},
-                              nonconservative_terms::Val{false}, equations,
-=======
-                              mesh::Union{StructuredMesh{2}, UnstructuredMesh2D, P4estMesh{2}},
                               nonconservative_terms::False, equations,
->>>>>>> main
                               volume_flux_fv, dg::DGSEM, element, cache)
   @unpack contravariant_vectors = cache.elements
   @unpack weights, derivative_matrix = dg.basis

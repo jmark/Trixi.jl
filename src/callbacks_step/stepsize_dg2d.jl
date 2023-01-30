@@ -108,13 +108,8 @@ function max_dt(u, t, mesh::Union{StructuredMesh{2}, UnstructuredMesh2D, P4estMe
 end
 
 
-<<<<<<< HEAD
 function max_dt(u, t, mesh::Union{StructuredMesh{2}, UnstructuredMesh2D, P4estMesh{2}, T8codeMesh{2}},
-                constant_speed::Val{true}, equations, dg::DG, cache)
-=======
-function max_dt(u, t, mesh::Union{StructuredMesh{2}, UnstructuredMesh2D, P4estMesh{2}},
                 constant_speed::True, equations, dg::DG, cache)
->>>>>>> main
   @unpack contravariant_vectors, inverse_jacobian = cache.elements
 
   # to avoid a division by zero if the speed vanishes everywhere,
