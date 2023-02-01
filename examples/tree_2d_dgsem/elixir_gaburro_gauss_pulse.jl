@@ -52,12 +52,16 @@ surface_flux=(flux_lax_friedrichs, flux_nonconservative_gaburro)
  #                volume_integral=VolumeIntegralFluxDifferencing(volume_flux))
 
 
+@inline function gaburro_alpha_rho(u, equations::Gaburro2D)
+ return u[1]
+end
+
 basis = LobattoLegendreBasis(3)
 indicator_sc = IndicatorHennemannGassner(equations, basis,
                                           alpha_max=0.5,
                                           alpha_min=0.001,
                                           alpha_smooth=true,
-                                          variable=density)
+                                          variable=gaburro_alpha_rho)
 volume_integral = VolumeIntegralShockCapturingHG(indicator_sc;
                                                   volume_flux_dg=volume_flux,
                                                   volume_flux_fv=surface_flux)

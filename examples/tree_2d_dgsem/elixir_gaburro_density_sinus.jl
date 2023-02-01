@@ -24,7 +24,7 @@ function initial_condition_const(x, t, equations::Gaburro2D)
 end
 
 function initial_condition_line(x, t, equations::Gaburro2D)
-  if((-0.1 * x[1] + x[2]) <= 0.45)
+  if((-0.5 * x[1] + x[2]) <= 0.45)
       # liquid domain
       rho = 1000.0
       v1 = 0.0
@@ -83,6 +83,10 @@ boundary_conditions = (x_neg=boundary_condition_wall,
                        x_pos=boundary_condition_wall,
                        y_neg=boundary_condition_wall,
                        y_pos=boundary_condition_wall,)
+
+@inline function gaburro_alpha_rho(u, equations::Gaburro2D)
+ return u[1]
+end
   
 volume_flux = (flux_central, flux_nonconservative_gaburro)
 surface_flux=(flux_lax_friedrichs, flux_nonconservative_gaburro)
@@ -92,7 +96,7 @@ indicator_sc = IndicatorHennemannGassner(equations, basis,
                                           alpha_max=1.0,
                                           alpha_min=0.001,
                                           alpha_smooth=true,
-                                          variable=density)
+                                          variable=gaburro_alpha_rho)
 volume_integral = VolumeIntegralShockCapturingHG(indicator_sc;
                                                   volume_flux_dg=volume_flux,
                                                   volume_flux_fv=surface_flux)
@@ -105,13 +109,13 @@ coordinates_max = ( 0.5, 1.0) # maximum coordinates (max(x), max(y))
 
 # Create a uniformly refined mesh with periodic boundaries
 mesh = TreeMesh(coordinates_min, coordinates_max,
-                initial_refinement_level=5,
-                n_cells_max=30_000, periodicity=(false,false))
+                initial_refinement_level=6,
+                n_cells_max=90_000, periodicity=(false,false))
 
 semi = SemidiscretizationHyperbolic(mesh, equations, initial_condition, solver, 
                 source_terms=source_terms_gravity, boundary_conditions=boundary_conditions)
 
-tspan = (0.0, 1.0)
+tspan = (0.0, 10.0)
 ode = semidiscretize(semi, tspan)
 
 summary_callback = SummaryCallback()
@@ -122,38 +126,108 @@ alive_callback = AliveCallback(analysis_interval=analysis_interval)
 
 stepsize_callback = StepsizeCallback(cfl=0.4)
 
-function save_my_plot(plot_data, variable_names;
-  show_mesh=false, plot_arguments=Dict{Symbol,Any}(),
-  time=nothing, timestep=nothing)
+# function save_my_plot(plot_data, variable_names;
+#   show_mesh=false, plot_arguments=Dict{Symbol,Any}(),
+#   time=nothing, timestep=nothing)
+# 
+#   # Gather subplots
+#   plots = []
+#   for v in variable_names
+#     push!(plots, Plots.plot(plot_data[v]; plot_arguments...))
+#   end
+#   if show_mesh
+#     push!(plots, Plots.plot(getmesh(plot_data); plot_arguments...))
+#   end
+# 
+#   pressure_matrix = equations.k0 .* plot_data.data[1]
+#   pressure_matrix = pressure_matrix .- equations.k0
+#   push!(plots, Plots.plot(heatmap(plot_data.x, plot_data.y, pressure_matrix), title = "pressure", width=10, height=10))
+# 
+#   # Create plot
+#   Plots.plot(plots...,)
+# 
+#   # Determine filename and save plot
+#   filename = joinpath("out", @sprintf("solution_%06d.png", timestep))
+#   Plots.savefig(filename)
+# end
+# 
+# visualization_callback = VisualizationCallback(; interval=1000,
+#                           solution_variables=cons2prim,
+#                           #variable_names=["rho"],
+#                           show_mesh=false,
+#                           plot_data_creator=PlotData2D,
+#                           #plot_creator=save_my_plot,
+#                           )
 
-  # Gather subplots
-  plots = []
-  for v in variable_names
-    push!(plots, Plots.plot(plot_data[v]; plot_arguments...))
-  end
-  if show_mesh
-    push!(plots, Plots.plot(getmesh(plot_data); plot_arguments...))
-  end
+function my_save_plot(plot_data, variable_names;
+                   show_mesh=true, plot_arguments=Dict{Symbol,Any}(),
+                   time=nothing, timestep=nothing)
 
-  pressure_matrix = equations.k0 .* plot_data.data[1]
-  pressure_matrix = pressure_matrix .- equations.k0
-  push!(plots, Plots.plot(heatmap(plot_data.x, plot_data.y, pressure_matrix), title = "pressure", width=10, height=10))
+  title = @sprintf("2D KHI | Trixi.jl | 4th-order DG | Gaburro: t = %3.2f", time)
 
-  # Create plot
-  Plots.plot(plots...,)
+  # println("plot_data")
+  # println(plot_data["rho"].plot_data.x)
 
-  # Determine filename and save plot
+  # x = plot_data["rho"].plot_data.x
+  # y = plot_data["rho"].plot_data.y
+
+  # rho = plot_data["rho"].plot_data.data
+  # alpha = plot_data["alpha"].plot_data.data
+
+  # sol = plot_data["rho"] # .* plot_data["alpha"]
+
+  # sol = plot_data["rho"].plot_data
+
+  # plotvar = plot_data["alpha"]
+  # plotvar = plot_data["rho"]
+  plotvar = plot_data["alpha_rho"]
+  # plotvar = plot_data["alpha_rho"]
+  # rho, rhou, rhov, alpha = StructArrays.components(sol.u[end])
+
+  # foo = rho # .* alpha
+
+  # plotvar = ScalarPlotData2D(foo, semi)
+  # plotvar = ScalarPlotData2D(x .* y, semi)
+
+  # sol = ScalarPlotData2D(x .* y, semi))
+
+  Plots.plot(plotvar,
+    clim=(0.0,1200.0),
+    colorbar_title="\ndensity",
+    title=title,titlefontsize=10,
+    dpi=300,
+  )
+
+  # Plots.plot!(getmesh(plot_data),linewidth=0.5)
+
+  mkpath("out")
   filename = joinpath("out", @sprintf("solution_%06d.png", timestep))
   Plots.savefig(filename)
 end
 
-visualization_callback = VisualizationCallback(; interval=1000,
-                          solution_variables=cons2prim,
-                          #variable_names=["rho"],
-                          show_mesh=false,
-                          plot_data_creator=PlotData2D,
-                          #plot_creator=save_my_plot,
-                          )
+# Convert conservative variables to primitive
+function cons2cons(u, equations::Gaburro2D)
+  alpha_rho, alpha_rho_v1, alpha_rho_v2, alpha = u
+
+  # rho = alpha_rho/alpha
+  # v1 = alpha_rho_v1 / alpha_rho
+  # v2 = alpha_rho_v2 / alpha_rho
+    
+  return SVector(alpha_rho, alpha_rho_v1, alpha_rho_v2, alpha)
+end
+
+Trixi.varnames(::typeof(cons2cons), equations) = ("alpha_rho", "alpha_rho_v1", "alpha_rho_v2", "alpha")
+
+#visualization_callback = VisualizationCallback(plot_creator=my_save_plot,interval=10, clims=(0,1.1), show_mesh=true)
+visualization_callback = VisualizationCallback(; interval=500,
+                            # solution_variables=cons2prim,
+                            solution_variables=cons2cons,
+                            #variable_names=["rho"],
+                            show_mesh=false,
+                            # plot_data_creator=PlotData2D,
+                            plot_creator=my_save_plot,
+                            #plot_creator=save_my_plot,
+                            )
 
 callbacks = CallbackSet(stepsize_callback, visualization_callback, alive_callback)
 
