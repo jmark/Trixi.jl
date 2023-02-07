@@ -1,7 +1,7 @@
-using OrdinaryDiffEq
 using Trixi
+using Plots
 using Printf
-
+using OrdinaryDiffEq
 
 equations = Gaburro2D(1.0, 2.78*10^5, 1000.0, 9.81)
 
@@ -25,6 +25,7 @@ end
 
 function initial_condition_line(x, t, equations::Gaburro2D)
   if((-0.5 * x[1] + x[2]) <= 0.45)
+  # if((0.0 * x[1] + x[2]) <= 0.45)
       # liquid domain
       rho = 1000.0
       v1 = 0.0
@@ -109,7 +110,7 @@ coordinates_max = ( 0.5, 1.0) # maximum coordinates (max(x), max(y))
 
 # Create a uniformly refined mesh with periodic boundaries
 mesh = TreeMesh(coordinates_min, coordinates_max,
-                initial_refinement_level=6,
+                initial_refinement_level=7,
                 n_cells_max=90_000, periodicity=(false,false))
 
 semi = SemidiscretizationHyperbolic(mesh, equations, initial_condition, solver, 
@@ -163,7 +164,7 @@ function my_save_plot(plot_data, variable_names;
                    show_mesh=true, plot_arguments=Dict{Symbol,Any}(),
                    time=nothing, timestep=nothing)
 
-  title = @sprintf("2D KHI | Trixi.jl | 4th-order DG | Gaburro: t = %3.2f", time)
+  title = @sprintf("2D Sloshing | Trixi.jl | 4th-order DG | t = %3.2f", time)
 
   # println("plot_data")
   # println(plot_data["rho"].plot_data.x)
